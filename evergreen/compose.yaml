@@ -1,0 +1,35 @@
+x-service-defaults: &service-defaults
+  user: root
+  environment:
+    TZ: ${TZ:-Asia/Seoul}
+    SPRING_CONFIG_IMPORT: ${SPRING_CONFIG_IMPORT:-configserver:http://config:8888}
+  networks:
+    - spring_default
+    - grafana_default
+  deploy:
+    replicas: 1
+    update_config:
+      parallelism: 1
+      order: stop-first
+      failure_action: rollback
+    rollback_config:
+      parallelism: 1
+      order: stop-first
+    restart_policy:
+      condition: on-failure
+      delay: 5s
+
+services:
+  lotto:
+    <<: *service-defaults
+    image: ${LOTTO_IMAGE:-ghcr.io/now-start/lotto-service}:${LOTTO_TAG:-latest}
+
+  coin:
+    <<: *service-defaults
+    image: ${COIN_IMAGE:-ghcr.io/now-start/evergreen}:${COIN_TAG:-latest}
+
+networks:
+  spring_default:
+    external: true
+  grafana_default:
+    external: true

@@ -1,0 +1,25 @@
+# IDE and operating-system files
+.idea/
+.vscode/
+.DS_Store
+
+# Local overrides and secret material
+.env
+.env.*
+!.env.example
+*.local
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+secrets/
+
+# Compose override files are workstation-specific
+compose.override.yaml
+compose.override.yml
+
+# Temporary files
+*.log
+*.tmp
+*~

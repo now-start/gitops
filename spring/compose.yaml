@@ -1,0 +1,56 @@
+x-service-defaults: &service-defaults
+  user: root
+  environment:
+    TZ: ${TZ:-Asia/Seoul}
+    SPRING_CONFIG_IMPORT: ${SPRING_CONFIG_IMPORT:-configserver:http://config:8888}
+  networks:
+    - default
+    - grafana_default
+  deploy:
+    replicas: 1
+    update_config:
+      parallelism: 1
+      order: stop-first
+      failure_action: rollback
+    rollback_config:
+      parallelism: 1
+      order: stop-first
+    restart_policy:
+      condition: on-failure
+      delay: 5s
+
+services:
+  config:
+    <<: *service-defaults
+    image: ${CONFIG_IMAGE:-ghcr.io/now-start/config}:${CONFIG_TAG:-latest}
+    environment:
+      TZ: ${TZ:-Asia/Seoul}
+      ENCRYPT_KEY: ${SPRING_ENCRYPT_KEY:?Set SPRING_ENCRYPT_KEY in Arcane}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL:-http://eureka:8761/eureka/}
+
+  eureka:
+    <<: *service-defaults
+    image: ${EUREKA_IMAGE:-ghcr.io/now-start/eureka}:${EUREKA_TAG:-latest}
+
+  admin:
+    <<: *service-defaults
+    image: ${ADMIN_IMAGE:-ghcr.io/now-start/admin}:${ADMIN_TAG:-latest}
+
+  gateway:
+    <<: *service-defaults
+    image: ${GATEWAY_IMAGE:-ghcr.io/now-start/gateway}:${GATEWAY_TAG:-latest}
+    ports:
+      - target: 8000
+        published: ${GATEWAY_PORT:-8000}
+        protocol: tcp
+        mode: ingress
+    environment:
+      TZ: ${TZ:-Asia/Seoul}
+      JAVA_TOOL_OPTIONS: ${GATEWAY_JAVA_TOOL_OPTIONS:--XX:MaxDirectMemorySize=256m}
+      SPRING_CONFIG_IMPORT: ${SPRING_CONFIG_IMPORT:-configserver:http://config:8888}
+
+networks:
+  default:
+    driver: overlay
+  grafana_default:
+    external: true

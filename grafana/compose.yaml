@@ -1,0 +1,55 @@
+services:
+  grafana:
+    image: ${GRAFANA_IMAGE:-grafana/otel-lgtm}:${GRAFANA_TAG:-latest}
+    ports:
+      - target: 3000
+        published: ${GRAFANA_PORT:-3000}
+        protocol: tcp
+        mode: ingress
+    environment:
+      TZ: ${TZ:-Asia/Seoul}
+      GF_PLUGINS_PREINSTALL: grafana-lokiexplore-app,grafana-metricsdrilldown-app,grafana-exploretraces-app,grafana-pyroscope-app
+      GF_USERS_DEFAULT_LANGUAGE: ko-KR
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-https://grafana.nowstart.org}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
+      GF_AUTH_GENERIC_OAUTH_NAME: SSO
+      GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP: "true"
+      GF_AUTH_GENERIC_OAUTH_CLIENT_ID: ${GRAFANA_OAUTH_CLIENT_ID:?Set GRAFANA_OAUTH_CLIENT_ID in Arcane}
+      GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET: ${GRAFANA_OAUTH_CLIENT_SECRET:?Set GRAFANA_OAUTH_CLIENT_SECRET in Arcane}
+      GF_AUTH_GENERIC_OAUTH_SCOPES: openid groups email
+      GF_AUTH_GENERIC_OAUTH_AUTH_URL: ${GRAFANA_OAUTH_AUTH_URL:-https://sso.nowstart.org/webman/sso/SSOOauth.cgi}
+      GF_AUTH_GENERIC_OAUTH_TOKEN_URL: ${GRAFANA_OAUTH_TOKEN_URL:-https://sso.nowstart.org/webman/sso/SSOAccessToken.cgi}
+      GF_AUTH_GENERIC_OAUTH_API_URL: ${GRAFANA_OAUTH_API_URL:-https://sso.nowstart.org/webman/sso/SSOUserInfo.cgi}
+      GF_AUTH_GENERIC_OAUTH_ALLOW_ASSIGN_GRAFANA_ADMIN: "true"
+      GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH: "contains(groups[*], 'administrators') && 'GrafanaAdmin' || 'Viewer'"
+      GF_SMTP_ENABLED: "true"
+      GF_SMTP_HOST: ${GRAFANA_SMTP_HOST:-mail.nowstart.org:587}
+      GF_SMTP_USER: ${GRAFANA_SMTP_USER:?Set GRAFANA_SMTP_USER in Arcane}
+      GF_SMTP_PASSWORD: ${GRAFANA_SMTP_PASSWORD:?Set GRAFANA_SMTP_PASSWORD in Arcane}
+      GF_SMTP_FROM_ADDRESS: ${GRAFANA_SMTP_FROM_ADDRESS:-no-reply@nowstart.org}
+    volumes:
+      - grafana_data:/data
+    deploy:
+      replicas: ${GRAFANA_REPLICAS:-1}
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+
+volumes:
+  grafana_data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=${NFS_ADDRESS:-10.8.0.1},vers=4,hard
+      device: :${GRAFANA_NFS_PATH:-/volume1/docker/grafana}

@@ -1,0 +1,33 @@
+services:
+  flame:
+    image: ${FLAME_IMAGE:-pawelmalak/flame}:${FLAME_TAG:-latest}
+    ports:
+      - target: 5005
+        published: ${FLAME_PORT:-5005}
+        protocol: tcp
+        mode: ingress
+    environment:
+      TZ: ${TZ:-Asia/Seoul}
+      PASSWORD: ${FLAME_PASSWORD:?Set FLAME_PASSWORD in Arcane}
+    volumes:
+      - flame_data:/app/data
+    deploy:
+      replicas: ${FLAME_REPLICAS:-1}
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+
+volumes:
+  flame_data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=${NFS_ADDRESS:-10.8.0.1},vers=4,hard
+      device: :${FLAME_NFS_PATH:-/volume1/docker/flame}
