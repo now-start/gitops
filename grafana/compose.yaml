@@ -19,7 +19,7 @@ services:
       GF_AUTH_GENERIC_OAUTH_NAME: SSO
       GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP: "true"
       GF_AUTH_GENERIC_OAUTH_CLIENT_ID: "f39157fa414e14e8edc6c8ce140c7886"
-      GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET: ${GRAFANA_OAUTH_CLIENT_SECRET:?Set GRAFANA_OAUTH_CLIENT_SECRET in Arcane}
+      GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET: ${GRAFANA_OAUTH_CLIENT_SECRET:-}
       GF_AUTH_GENERIC_OAUTH_SCOPES: openid groups email
       GF_AUTH_GENERIC_OAUTH_AUTH_URL: https://sso.nowstart.org/webman/sso/SSOOauth.cgi
       GF_AUTH_GENERIC_OAUTH_TOKEN_URL: https://sso.nowstart.org/webman/sso/SSOAccessToken.cgi
@@ -29,7 +29,7 @@ services:
       GF_SMTP_ENABLED: "true"
       GF_SMTP_HOST: mail.nowstart.org:587
       GF_SMTP_USER: phantom2691
-      GF_SMTP_PASSWORD: ${GRAFANA_SMTP_PASSWORD:?Set GRAFANA_SMTP_PASSWORD in Arcane}
+      GF_SMTP_PASSWORD: ${GRAFANA_SMTP_PASSWORD:-}
       GF_SMTP_FROM_ADDRESS: no-reply@nowstart.org
     volumes:
       - grafana_data:/data

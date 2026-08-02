@@ -14,7 +14,7 @@ services:
       SSO_AUTH_ONLY_NOT_SESSION: "true"
       SSO_AUTHORITY: https://sso.nowstart.org/webman/sso
       SSO_CLIENT_ID: "1db429ff8c99accb53cdf5d989e70c91"
-      SSO_CLIENT_SECRET: ${BITWARDEN_SSO_CLIENT_SECRET:?Set BITWARDEN_SSO_CLIENT_SECRET in Arcane}
+      SSO_CLIENT_SECRET: ${BITWARDEN_SSO_CLIENT_SECRET:-}
     volumes:
       - bitwarden_data:/data
     deploy:

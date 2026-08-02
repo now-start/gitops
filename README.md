@@ -24,9 +24,10 @@ Arcane. Each top-level directory is one independently deployed stack.
    Compose path.
 4. Enable automatic synchronization only after the first manual deployment has
    succeeded.
-5. Copy the selected stack's `.env.example` into Arcane's `.env` editor, then
-   enter its required values before deploying. Empty required values
-   intentionally make Compose validation fail.
+5. Create the Git sync first, then copy the selected stack's `.env.example`
+   into Arcane's `.env` editor and enter its secret values before deploying.
+   Secret variables render as empty during the initial Git validation so the
+   sync can be created; do not treat a successful sync as deployment readiness.
 
 Deploy in this order because the application stacks use networks created by the
 first two stacks:
