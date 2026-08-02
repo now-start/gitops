@@ -1,8 +1,8 @@
 x-service-defaults: &service-defaults
   user: root
   environment:
-    TZ: ${TZ:-Asia/Seoul}
-    SPRING_CONFIG_IMPORT: ${SPRING_CONFIG_IMPORT:-configserver:http://config:8888}
+    TZ: Asia/Seoul
+    SPRING_CONFIG_IMPORT: configserver:http://config:8888
   networks:
     - spring_default
     - grafana_default
@@ -22,11 +22,11 @@ x-service-defaults: &service-defaults
 services:
   lotto:
     <<: *service-defaults
-    image: ${LOTTO_IMAGE:-ghcr.io/now-start/lotto-service}:${LOTTO_TAG:-latest}
+    image: ghcr.io/now-start/lotto-service:latest
 
   coin:
     <<: *service-defaults
-    image: ${COIN_IMAGE:-ghcr.io/now-start/evergreen}:${COIN_TAG:-latest}
+    image: ghcr.io/now-start/evergreen:latest
 
 networks:
   spring_default:

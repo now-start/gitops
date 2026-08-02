@@ -1,24 +1,24 @@
 services:
   bitwarden:
-    image: ${BITWARDEN_IMAGE:-vaultwarden/server}:${BITWARDEN_TAG:-latest}
+    image: vaultwarden/server:latest
     ports:
       - target: 80
-        published: ${BITWARDEN_PORT:-1080}
+        published: 1080
         protocol: tcp
         mode: ingress
     environment:
-      TZ: ${TZ:-Asia/Seoul}
-      DOMAIN: ${BITWARDEN_DOMAIN:-https://bitwarden.nowstart.org}
+      TZ: Asia/Seoul
+      DOMAIN: https://bitwarden.nowstart.org
       SSO_ENABLED: "true"
       SSO_ONLY: "true"
       SSO_AUTH_ONLY_NOT_SESSION: "true"
-      SSO_AUTHORITY: ${BITWARDEN_SSO_AUTHORITY:-https://sso.nowstart.org/webman/sso}
-      SSO_CLIENT_ID: ${BITWARDEN_SSO_CLIENT_ID:?Set BITWARDEN_SSO_CLIENT_ID in Arcane}
+      SSO_AUTHORITY: https://sso.nowstart.org/webman/sso
+      SSO_CLIENT_ID: "1db429ff8c99accb53cdf5d989e70c91"
       SSO_CLIENT_SECRET: ${BITWARDEN_SSO_CLIENT_SECRET:?Set BITWARDEN_SSO_CLIENT_SECRET in Arcane}
     volumes:
       - bitwarden_data:/data
     deploy:
-      replicas: ${BITWARDEN_REPLICAS:-1}
+      replicas: 1
       update_config:
         parallelism: 1
         order: stop-first
@@ -35,5 +35,5 @@ volumes:
     driver: local
     driver_opts:
       type: nfs
-      o: addr=${NFS_ADDRESS:-10.8.0.1},vers=4,hard
-      device: :${BITWARDEN_NFS_PATH:-/volume1/docker/bitwarden}
+      o: addr=10.8.0.1,vers=4,hard
+      device: :/volume1/docker/bitwarden

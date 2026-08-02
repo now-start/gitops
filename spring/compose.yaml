@@ -1,8 +1,8 @@
 x-service-defaults: &service-defaults
   user: root
   environment:
-    TZ: ${TZ:-Asia/Seoul}
-    SPRING_CONFIG_IMPORT: ${SPRING_CONFIG_IMPORT:-configserver:http://config:8888}
+    TZ: Asia/Seoul
+    SPRING_CONFIG_IMPORT: configserver:http://config:8888
   networks:
     - default
     - grafana_default
@@ -22,32 +22,32 @@ x-service-defaults: &service-defaults
 services:
   config:
     <<: *service-defaults
-    image: ${CONFIG_IMAGE:-ghcr.io/now-start/config}:${CONFIG_TAG:-latest}
+    image: ghcr.io/now-start/config:latest
     environment:
-      TZ: ${TZ:-Asia/Seoul}
+      TZ: Asia/Seoul
       ENCRYPT_KEY: ${SPRING_ENCRYPT_KEY:?Set SPRING_ENCRYPT_KEY in Arcane}
-      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL:-http://eureka:8761/eureka/}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
 
   eureka:
     <<: *service-defaults
-    image: ${EUREKA_IMAGE:-ghcr.io/now-start/eureka}:${EUREKA_TAG:-latest}
+    image: ghcr.io/now-start/eureka:latest
 
   admin:
     <<: *service-defaults
-    image: ${ADMIN_IMAGE:-ghcr.io/now-start/admin}:${ADMIN_TAG:-latest}
+    image: ghcr.io/now-start/admin:latest
 
   gateway:
     <<: *service-defaults
-    image: ${GATEWAY_IMAGE:-ghcr.io/now-start/gateway}:${GATEWAY_TAG:-latest}
+    image: ghcr.io/now-start/gateway:latest
     ports:
       - target: 8000
-        published: ${GATEWAY_PORT:-8000}
+        published: 8000
         protocol: tcp
         mode: ingress
     environment:
-      TZ: ${TZ:-Asia/Seoul}
-      JAVA_TOOL_OPTIONS: ${GATEWAY_JAVA_TOOL_OPTIONS:--XX:MaxDirectMemorySize=256m}
-      SPRING_CONFIG_IMPORT: ${SPRING_CONFIG_IMPORT:-configserver:http://config:8888}
+      TZ: Asia/Seoul
+      JAVA_TOOL_OPTIONS: -XX:MaxDirectMemorySize=256m
+      SPRING_CONFIG_IMPORT: configserver:http://config:8888
 
 networks:
   default:

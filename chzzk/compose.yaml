@@ -1,17 +1,17 @@
 services:
   nyang-nyang-bot:
-    image: ${CHZZK_IMAGE:-ghcr.io/now-start/nyang-nyang-bot}:${CHZZK_TAG:-latest}
+    image: ghcr.io/now-start/nyang-nyang-bot:latest
     user: root
     environment:
-      TZ: ${TZ:-Asia/Seoul}
-      SPRING_CONFIG_IMPORT: ${SPRING_CONFIG_IMPORT:-configserver:http://config:8888}
+      TZ: Asia/Seoul
+      SPRING_CONFIG_IMPORT: configserver:http://config:8888
     volumes:
       - chzzk_data:/workspace/key
     networks:
       - spring_default
       - grafana_default
     deploy:
-      replicas: ${CHZZK_REPLICAS:-1}
+      replicas: 1
       update_config:
         parallelism: 1
         order: stop-first
@@ -28,8 +28,8 @@ volumes:
     driver: local
     driver_opts:
       type: nfs
-      o: addr=${NFS_ADDRESS:-10.8.0.1},vers=4,hard
-      device: :${CHZZK_NFS_PATH:-/volume1/docker/chzzk}
+      o: addr=10.8.0.1,vers=4,hard
+      device: :/volume1/docker/chzzk
 
 networks:
   spring_default:

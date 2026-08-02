@@ -40,20 +40,34 @@ Arcane redeploys a synchronized stack only when that stack is already running.
 The repository Compose files remain read-only in Arcane; make structural changes
 through Git.
 
+## Image version ownership
+
+Image names and deployment tags are declared directly in each tracked
+`compose.yaml`. Do not move them into Arcane's local `.env`; doing so would make
+the running version invisible to Git Sync.
+
+Application pipelines should build and push an immutable tag (a release version
+or commit SHA), then update the matching `image:` line in this repository. A push
+to `main` is detected by Arcane Auto Sync and rolls out the changed Swarm service.
+Use `latest` only as the initial value; replace it with immutable tags before
+enabling unattended production updates.
+
 ## Required Arcane environment values
 
 Do not commit real values for these variables:
 
 | Stack | Required variables |
 | --- | --- |
-| `bitwarden` | `BITWARDEN_SSO_CLIENT_ID`, `BITWARDEN_SSO_CLIENT_SECRET` |
-| `grafana` | `GRAFANA_OAUTH_CLIENT_ID`, `GRAFANA_OAUTH_CLIENT_SECRET`, `GRAFANA_SMTP_USER`, `GRAFANA_SMTP_PASSWORD` |
+| `bitwarden` | `BITWARDEN_SSO_CLIENT_SECRET` |
+| `grafana` | `GRAFANA_OAUTH_CLIENT_SECRET`, `GRAFANA_SMTP_PASSWORD` |
 | `spring` | `SPRING_ENCRYPT_KEY` |
 | `flame` | `FLAME_PASSWORD` |
 
-Only `.env.example` templates are tracked. Real `.env` files are ignored; keep
-their values in Arcane. If a credential was previously committed or shared in
-plain text, rotate it before deployment.
+Only secret variable names are tracked in `.env.example` templates. Real `.env`
+files contain secrets only and are ignored; keep their values in Arcane. Images,
+ports, domains, network/storage paths, and other non-sensitive settings belong
+in the tracked Compose files. If a credential was previously committed or
+shared in plain text, rotate it before deployment.
 
 ## Swarm prerequisites
 
