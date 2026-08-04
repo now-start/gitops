@@ -13,6 +13,38 @@ Arcane. Each top-level directory is one independently deployed stack.
 | `evergreen` | `evergreen/compose.yaml` | Lotto and coin services | `spring_default`, `grafana_default` |
 | `bitwarden` | `bitwarden/compose.yaml` | Vaultwarden | NFS |
 | `flame` | `flame/compose.yaml` | Flame dashboard | NFS |
+| `redis` | `redis/compose.yaml` | Redis data store | NFS |
+
+## New stack template
+
+Copy `_template` when adding a stack, then replace every `REPLACE_*`, `app`,
+`APP_SECRET`, and `app_data` value with names appropriate for that service.
+Remove the environment or volume section when the service does not need it;
+do not retain placeholder or unused configuration.
+
+The template intentionally follows the repository defaults: the `latest` image
+tag, secret-only environment interpolation, a service-specific liveness
+healthcheck, NFS-backed storage, and the common single-replica Swarm update and
+rollback policy. A healthcheck must test the service itself without depending
+on an external database or API, to avoid cascading restarts.
+Replace the template's `CMD-SHELL` with exec-form `CMD` when the image provides
+a dedicated checker, and use `CMD-SHELL` only after confirming that the image
+contains a shell and every command used by the check.
+
+The common policy uses a 60-second healthcheck start period, a three-minute
+update and rollback monitor, automatic rollback for failed updates, and restart
+condition `any`. Only the healthcheck command varies by service. Stacks whose
+images do not provide a usable checker still use the same deploy policy without
+a healthcheck.
+
+## Health checks
+
+Healthchecks are enabled only when the image contains a verified checker:
+Vaultwarden and Grafana use their bundled scripts, Flame uses Node.js, and
+Redis uses an authenticated `PING`. The Spring buildpack images are shell-less
+and currently contain no healthcheck process, so `spring`, `chzzk`, and
+`evergreen` must not receive a shell-based check. Add the Paketo health-checker
+at image build time before enabling their Actuator liveness probes in Swarm.
 
 ## Arcane Git Sync
 
@@ -36,6 +68,7 @@ first two stacks:
 2. `spring`
 3. `chzzk` and `evergreen`
 4. `bitwarden` and `flame`
+5. `redis`
 
 Arcane redeploys a synchronized stack only when that stack is already running.
 The repository Compose files remain read-only in Arcane; make structural changes
@@ -63,6 +96,7 @@ Do not commit real values for these variables:
 | `grafana` | `GRAFANA_OAUTH_CLIENT_SECRET`, `GRAFANA_SMTP_PASSWORD` |
 | `spring` | `SPRING_ENCRYPT_KEY` |
 | `flame` | `FLAME_PASSWORD` |
+| `redis` | `REDIS_PASSWORD` |
 
 Only secret variable names are tracked in `.env.example` templates. Real `.env`
 files contain secrets only and are ignored; keep their values in Arcane. Images,
@@ -97,6 +131,8 @@ SPRING_ENCRYPT_KEY=test docker stack config -c spring/compose.yaml >/dev/null
 
 docker stack config -c chzzk/compose.yaml >/dev/null
 docker stack config -c evergreen/compose.yaml >/dev/null
+
+REDIS_PASSWORD=test docker stack config -c redis/compose.yaml >/dev/null
 ```
 
 After deployment, verify the actual scheduler and network state:

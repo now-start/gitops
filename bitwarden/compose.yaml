@@ -17,17 +17,26 @@ services:
       SSO_CLIENT_SECRET: ${BITWARDEN_SSO_CLIENT_SECRET:-}
     volumes:
       - bitwarden_data:/data
+    healthcheck:
+      test: ["CMD", "/healthcheck.sh"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     deploy:
       replicas: 1
       update_config:
         parallelism: 1
         order: stop-first
         failure_action: rollback
+        monitor: 3m
       rollback_config:
         parallelism: 1
         order: stop-first
+        failure_action: pause
+        monitor: 3m
       restart_policy:
-        condition: on-failure
+        condition: any
         delay: 5s
 
 volumes:
