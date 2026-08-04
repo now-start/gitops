@@ -12,13 +12,7 @@ services:
     volumes:
       - flame_data:/app/data
     healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - >-
-          require('http').get('http://127.0.0.1:5005/', response =>
-          process.exit(response.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:5005/', response => process.exit(response.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
