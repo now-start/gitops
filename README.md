@@ -14,6 +14,7 @@ Arcane. Each top-level directory is one independently deployed stack.
 | `bitwarden` | `bitwarden/compose.yaml` | Vaultwarden | NFS |
 | `flame` | `flame/compose.yaml` | Flame dashboard | NFS |
 | `redis` | `redis/compose.yaml` | Redis data store | NFS |
+| `probe` | `probe/compose.yaml` | Per-node ingress routing mesh probe | `flame` |
 
 ## New stack template
 
@@ -56,7 +57,7 @@ at image build time before enabling their Actuator liveness probes in Swarm.
    Compose path.
 4. Enable automatic synchronization only after the first manual deployment has
    succeeded.
-5. Create the Git sync first, then copy the selected stack's `.env.example`
+5. For a stack that has `.env.example`, create the Git sync first, then copy it
    into Arcane's `.env` editor and enter its secret values before deploying.
    Secret variables render as empty during the initial Git validation so the
    sync can be created; do not treat a successful sync as deployment readiness.
@@ -67,8 +68,8 @@ first two stacks:
 1. `grafana`
 2. `spring`
 3. `chzzk` and `evergreen`
-4. `bitwarden` and `flame`
-5. `redis`
+4. `bitwarden`, `flame`, and `redis`
+5. `probe`
 
 Arcane redeploys a synchronized stack only when that stack is already running.
 The repository Compose files remain read-only in Arcane; make structural changes
@@ -112,6 +113,8 @@ shared in plain text, rotate it before deployment.
 - Every eligible node must be able to mount NFSv4 from `10.8.0.1`.
 - The manager must be authenticated to `ghcr.io` for private images.
 - Published ports `1080`, `5005`, `3000`, and `8000` must be available.
+- Every node must provide Docker's built-in `host` network for `probe`.
+- `flame_flame` must be running with ingress port `5005` published before deploying `probe`.
 
 ## Local validation
 
@@ -133,6 +136,8 @@ docker stack config -c chzzk/compose.yaml >/dev/null
 docker stack config -c evergreen/compose.yaml >/dev/null
 
 REDIS_PASSWORD=test docker stack config -c redis/compose.yaml >/dev/null
+
+docker stack config -c probe/compose.yaml >/dev/null
 ```
 
 After deployment, verify the actual scheduler and network state:
@@ -142,6 +147,20 @@ docker stack services STACK_NAME
 docker stack ps --no-trunc STACK_NAME
 docker network inspect grafana_default
 docker network inspect spring_default
+```
+
+`probe` runs one host-network task on every available node. Each task calls its
+own node's existing Flame ingress endpoint at `127.0.0.1:5005` every 30 seconds,
+so it tests that node's local entry into the Swarm ingress routing mesh without
+opening another published port or depending on a fixed VPN IP. A failure on one
+node points to that node's ingress path; failures on every node can instead mean
+that Flame itself is unavailable. After five consecutive failed passes, the
+probe task exits so the affected node and restart are visible in Arcane and
+Swarm task history. Inspect the live result with:
+
+```sh
+docker service logs --since 10m probe_probe
+docker service ps --no-trunc probe_probe
 ```
 
 Syntax validation does not prove NFS availability, registry authentication,

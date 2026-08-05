@@ -1,0 +1,50 @@
+services:
+  probe:
+    image: busybox:1.36
+    environment:
+      NODE_NAME: "{{.Node.Hostname}}"
+      INGRESS_PORT: "5005"
+      FAILURE_THRESHOLD: "5"
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        consecutive_failures=0
+
+        while true; do
+          if wget -q -T 3 -O /dev/null "http://127.0.0.1:$${INGRESS_PORT}/"; then
+            consecutive_failures=0
+            echo "PASS node=$${NODE_NAME} ingress_port=$${INGRESS_PORT}"
+          else
+            consecutive_failures=$$((consecutive_failures + 1))
+            echo "FAIL node=$${NODE_NAME} ingress_port=$${INGRESS_PORT} consecutive=$$consecutive_failures/$${FAILURE_THRESHOLD}"
+          fi
+
+          if [ "$$consecutive_failures" -ge "$${FAILURE_THRESHOLD}" ]; then
+            echo "FATAL node=$${NODE_NAME} ingress routing mesh failed $$consecutive_failures consecutive times"
+            exit 1
+          fi
+
+          sleep 30
+        done
+    networks:
+      - host
+    deploy:
+      mode: global
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+        monitor: 3m
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: pause
+        monitor: 3m
+      restart_policy:
+        condition: any
+        delay: 5s
+
+networks:
+  host:
+    external: true
