@@ -55,10 +55,16 @@ services:
         condition: any
         delay: 5s
 
+networks:
+  default:
+    driver: overlay
+    driver_opts:
+      com.docker.network.driver.mtu: "1200"
+
 volumes:
   grafana_data:
     driver: local
     driver_opts:
       type: nfs
-      o: addr=10.8.0.1,vers=4,hard
+      o: addr=100.100.1.1,vers=4,hard
       device: :/volume1/docker/grafana

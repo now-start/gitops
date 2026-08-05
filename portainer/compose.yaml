@@ -1,0 +1,61 @@
+services:
+  agent:
+    image: portainer/agent:lts
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /volume1/@docker/volumes:/var/lib/docker/volumes
+    deploy:
+      mode: global
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+        monitor: 3m
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: pause
+        monitor: 3m
+      restart_policy:
+        condition: any
+        delay: 5s
+
+  portainer:
+    image: portainer/portainer-ce:lts
+    command: -H tcp://tasks.agent:9001 --tlsskipverify
+    ports:
+      - target: 9443
+        published: 9443
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - portainer_data:/data
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+        monitor: 3m
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: pause
+        monitor: 3m
+      restart_policy:
+        condition: any
+        delay: 5s
+
+networks:
+  default:
+    driver: overlay
+    driver_opts:
+      com.docker.network.driver.mtu: "1200"
+
+volumes:
+  portainer_data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=100.100.1.1,vers=4,hard
+      device: :/volume1/docker/portainer

@@ -7,6 +7,7 @@ Arcane. Each top-level directory is one independently deployed stack.
 
 | Stack | Compose path | Purpose | Dependencies |
 | --- | --- | --- | --- |
+| `portainer` | `portainer/compose.yaml` | Portainer CE Swarm management | Synology Docker volume path, NFS |
 | `grafana` | `grafana/compose.yaml` | Grafana LGTM observability | NFS |
 | `spring` | `spring/compose.yaml` | Config, Eureka, Admin, Gateway | `grafana_default` |
 | `chzzk` | `chzzk/compose.yaml` | nyang-nyang-bot | `spring_default`, `grafana_default`, NFS |
@@ -14,7 +15,6 @@ Arcane. Each top-level directory is one independently deployed stack.
 | `bitwarden` | `bitwarden/compose.yaml` | Vaultwarden | NFS |
 | `flame` | `flame/compose.yaml` | Flame dashboard | NFS |
 | `redis` | `redis/compose.yaml` | Redis data store | NFS |
-| `probe` | `probe/compose.yaml` | Per-node ingress routing mesh probe | `flame` |
 
 ## New stack template
 
@@ -65,11 +65,10 @@ at image build time before enabling their Actuator liveness probes in Swarm.
 Deploy in this order because the application stacks use networks created by the
 first two stacks:
 
-1. `grafana`
+1. `portainer` and `grafana`
 2. `spring`
 3. `chzzk` and `evergreen`
 4. `bitwarden`, `flame`, and `redis`
-5. `probe`
 
 Arcane redeploys a synchronized stack only when that stack is already running.
 The repository Compose files remain read-only in Arcane; make structural changes
@@ -108,13 +107,25 @@ shared in plain text, rotate it before deployment.
 ## Swarm prerequisites
 
 - The selected Arcane environment must be a Swarm manager.
+- Every Swarm node must expose Docker volumes at `/volume1/@docker/volumes` for the Portainer Agent.
+- The Portainer default overlay uses MTU `1200` to fit VXLAN traffic inside Tailscale.
+- Every stack-owned overlay network uses MTU `1200`; recreate existing networks before redeploying changed stacks.
+- Recreate the Swarm `ingress` network with MTU `1200` before deploying services that publish ports.
 - `grafana_default` must exist before `spring`, `chzzk`, or `evergreen` deploys.
 - `spring_default` must exist before `chzzk` or `evergreen` deploys.
-- Every eligible node must be able to mount NFSv4 from `10.8.0.1`.
+- Every eligible node must be able to mount NFSv4 from the `NOW_START` Tailscale address `100.100.1.1`.
+- DSM NFS permissions must allow the Tailscale client range `100.64.0.0/10`.
 - The manager must be authenticated to `ghcr.io` for private images.
-- Published ports `1080`, `5005`, `3000`, and `8000` must be available.
-- Every node must provide Docker's built-in `host` network for `probe`.
-- `flame_flame` must be running with ingress port `5005` published before deploying `probe`.
+- Published ports `1080`, `5005`, `3000`, `8000`, and `9443` must be available.
+
+After initializing a fresh Tailscale-backed Swarm and before deploying any
+published service, recreate its routing-mesh network with the same MTU:
+
+```sh
+docker network rm ingress
+docker network create --driver overlay --ingress \
+  --opt com.docker.network.driver.mtu=1200 ingress
+```
 
 ## Local validation
 
@@ -137,7 +148,7 @@ docker stack config -c evergreen/compose.yaml >/dev/null
 
 REDIS_PASSWORD=test docker stack config -c redis/compose.yaml >/dev/null
 
-docker stack config -c probe/compose.yaml >/dev/null
+docker stack config -c portainer/compose.yaml >/dev/null
 ```
 
 After deployment, verify the actual scheduler and network state:
@@ -147,20 +158,7 @@ docker stack services STACK_NAME
 docker stack ps --no-trunc STACK_NAME
 docker network inspect grafana_default
 docker network inspect spring_default
-```
-
-`probe` runs one host-network task on every available node. Each task calls its
-own node's existing Flame ingress endpoint at `127.0.0.1:5005` every 30 seconds,
-so it tests that node's local entry into the Swarm ingress routing mesh without
-opening another published port or depending on a fixed VPN IP. A failure on one
-node points to that node's ingress path; failures on every node can instead mean
-that Flame itself is unavailable. After five consecutive failed passes, the
-probe task exits so the affected node and restart are visible in Arcane and
-Swarm task history. Inspect the live result with:
-
-```sh
-docker service logs --since 10m probe_probe
-docker service ps --no-trunc probe_probe
+docker service ps --no-trunc portainer_agent
 ```
 
 Syntax validation does not prove NFS availability, registry authentication,
