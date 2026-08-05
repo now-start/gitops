@@ -116,7 +116,7 @@ shared in plain text, rotate it before deployment.
 - Every eligible node must be able to mount NFSv4 from the `NOW_START` Tailscale address `100.100.1.1`.
 - DSM NFS permissions must allow the Tailscale client range `100.64.0.0/10`.
 - The manager must be authenticated to `ghcr.io` for private images.
-- Published ports `1080`, `5005`, `3000`, `8000`, and `9443` must be available.
+- Published ports `1080`, `3000`, `5005`, `6379`, `8000`, and `9443` must be available.
 
 After initializing a fresh Tailscale-backed Swarm and before deploying any
 published service, recreate its routing-mesh network with the same MTU:
