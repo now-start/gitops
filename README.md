@@ -131,11 +131,12 @@ Portainer polling and rolls out only the changed Swarm service.
 ## Dependabot image updates
 
 `.github/dependabot.yml` uses one Docker Compose update configuration for all
-eight deployed stack directories, scheduled with a five-minute cron. GitHub may
-start a scheduled Dependabot run later than the nominal time. The normal
-three-day version cooldown is disabled. Each image update remains an independent
-pull request so that deployment and rollback stay scoped to one service. Review
-Portainer Agent and Server compatibility before merging either image update.
+eight deployed stack directories, scheduled every day at 09:00 Asia/Seoul.
+GitHub may start a scheduled Dependabot run later than the nominal time. The
+normal three-day version cooldown is disabled. Each image update remains an
+independent pull request so that deployment and rollback stay scoped to one
+service. Review Portainer Agent and Server compatibility before merging either
+image update.
 
 Dependabot only opens a pull request. `.github/workflows/validate-compose.yaml`
 renders every deployed Compose file, and a maintainer merges the PR after the
