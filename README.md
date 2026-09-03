@@ -38,6 +38,12 @@ condition `any`. Only the healthcheck command varies by service. Stacks whose
 images do not provide a usable checker still use the same deploy policy without
 a healthcheck.
 
+Most services use one replicated task. In the `platform` stack, `config` and
+`gateway` use global mode so Swarm runs one task on every eligible `x86_64`
+node, which corresponds to their current `linux/amd64` images. `eureka` and
+`admin` remain single-replica services. Remove the architecture constraint only
+after both global images are published as multi-platform images.
+
 ## Health checks
 
 Healthchecks are enabled only when the image contains a verified checker:

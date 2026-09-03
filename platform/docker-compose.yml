@@ -1,3 +1,25 @@
+x-deploy-defaults: &deploy-defaults
+  update_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: rollback
+    monitor: 3m
+  rollback_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: pause
+    monitor: 3m
+  restart_policy:
+    condition: any
+    delay: 5s
+
+x-global-deploy-defaults: &global-deploy-defaults
+  <<: *deploy-defaults
+  mode: global
+  placement:
+    constraints:
+      - node.platform.arch == x86_64
+
 x-service-defaults: &service-defaults
   user: root
   environment:
@@ -7,25 +29,16 @@ x-service-defaults: &service-defaults
     - default
     - grafana_default
   deploy:
+    <<: *deploy-defaults
+    mode: replicated
     replicas: 1
-    update_config:
-      parallelism: 1
-      order: stop-first
-      failure_action: rollback
-      monitor: 3m
-    rollback_config:
-      parallelism: 1
-      order: stop-first
-      failure_action: pause
-      monitor: 3m
-    restart_policy:
-      condition: any
-      delay: 5s
 
 services:
   config:
     <<: *service-defaults
     image: ghcr.io/now-start/config:2.1.14
+    deploy:
+      <<: *global-deploy-defaults
     environment:
       TZ: Asia/Seoul
       ENCRYPT_KEY: ${SPRING_ENCRYPT_KEY:-}
@@ -42,6 +55,8 @@ services:
   gateway:
     <<: *service-defaults
     image: ghcr.io/now-start/gateway:6.1.0
+    deploy:
+      <<: *global-deploy-defaults
     ports:
       - target: 8000
         published: 8000
