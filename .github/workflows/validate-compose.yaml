@@ -1,0 +1,52 @@
+name: Validate Compose
+
+on:
+  pull_request:
+    paths:
+      - "**/docker-compose.yml"
+      - ".github/dependabot.yml"
+      - ".github/workflows/validate-compose.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "**/docker-compose.yml"
+      - ".github/dependabot.yml"
+      - ".github/workflows/validate-compose.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      BITWARDEN_SSO_CLIENT_SECRET: test
+      FLAME_PASSWORD: test
+      GRAFANA_OAUTH_CLIENT_SECRET: test
+      GRAFANA_SMTP_PASSWORD: test
+      REDIS_PASSWORD: test
+      SPRING_ENCRYPT_KEY: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Render all Swarm stacks
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          compose_files=(
+            bitwarden/docker-compose.yml
+            chzzk/docker-compose.yml
+            evergreen/docker-compose.yml
+            flame/docker-compose.yml
+            grafana/docker-compose.yml
+            platform/docker-compose.yml
+            portainer/docker-compose.yml
+            redis/docker-compose.yml
+          )
+
+          for compose_file in "${compose_files[@]}"; do
+            echo "Validating $compose_file"
+            docker stack config -c "$compose_file" >/dev/null
+          done

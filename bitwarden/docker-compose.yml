@@ -1,12 +1,24 @@
 services:
-  app:
-    image: REPLACE_IMAGE:latest
+  bitwarden:
+    image: vaultwarden/server:1.37.2
+    ports:
+      - target: 80
+        published: 1080
+        protocol: tcp
+        mode: ingress
     environment:
-      APP_SECRET: ${APP_SECRET:-}
+      TZ: Asia/Seoul
+      DOMAIN: https://bitwarden.nowstart.org
+      SSO_ENABLED: "true"
+      SSO_ONLY: "true"
+      SSO_AUTH_ONLY_NOT_SESSION: "true"
+      SSO_AUTHORITY: https://sso.nowstart.org/webman/sso
+      SSO_CLIENT_ID: "1db429ff8c99accb53cdf5d989e70c91"
+      SSO_CLIENT_SECRET: ${BITWARDEN_SSO_CLIENT_SECRET:-}
     volumes:
-      - app_data:/data
+      - bitwarden_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "REPLACE_HEALTHCHECK"]
+      test: ["CMD", "/healthcheck.sh"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -34,9 +46,9 @@ networks:
       com.docker.network.driver.mtu: "1200"
 
 volumes:
-  app_data:
+  bitwarden_data:
     driver: local
     driver_opts:
       type: nfs
       o: addr=100.100.1.1,vers=4,hard
-      device: :/volume1/docker/REPLACE_STACK
+      device: :/volume1/docker/bitwarden

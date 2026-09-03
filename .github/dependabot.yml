@@ -1,0 +1,22 @@
+version: 2
+
+updates:
+  - package-ecosystem: "docker-compose"
+    directories:
+      - "/bitwarden"
+      - "/chzzk"
+      - "/evergreen"
+      - "/flame"
+      - "/grafana"
+      - "/platform"
+      - "/portainer"
+      - "/redis"
+    schedule:
+      interval: "cron"
+      cronjob: "*/5 * * * *"
+      timezone: "Asia/Seoul"
+    cooldown:
+      exclude:
+        - "*"
+    commit-message:
+      prefix: "deploy"

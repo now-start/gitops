@@ -1,21 +1,18 @@
 services:
-  redis:
-    image: redis:latest
+  flame:
+    image: pawelmalak/flame:2.4.0
     ports:
-      - target: 6379
-        published: 6379
+      - target: 5005
+        published: 5005
         protocol: tcp
         mode: ingress
-    command:
-      - sh
-      - -c
-      - exec redis-server --appendonly yes --appendfsync everysec --requirepass "$$REDIS_PASSWORD"
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      TZ: Asia/Seoul
+      PASSWORD: ${FLAME_PASSWORD:-}
     volumes:
-      - redis_data:/data
+      - flame_data:/app/data
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:5005/', response => process.exit(response.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -43,9 +40,9 @@ networks:
       com.docker.network.driver.mtu: "1200"
 
 volumes:
-  redis_data:
+  flame_data:
     driver: local
     driver_opts:
       type: nfs
       o: addr=100.100.1.1,vers=4,hard
-      device: :/volume1/docker/redis
+      device: :/volume1/docker/flame

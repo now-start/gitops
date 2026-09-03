@@ -4,7 +4,7 @@ x-service-defaults: &service-defaults
     TZ: Asia/Seoul
     SPRING_CONFIG_IMPORT: configserver:http://config:8888
   networks:
-    - spring_default
+    - platform_default
     - grafana_default
   deploy:
     replicas: 1
@@ -25,14 +25,14 @@ x-service-defaults: &service-defaults
 services:
   lotto:
     <<: *service-defaults
-    image: ghcr.io/now-start/lotto-service:latest
+    image: ghcr.io/now-start/lotto-service:9.4.0
 
   coin:
     <<: *service-defaults
-    image: ghcr.io/now-start/evergreen:latest
+    image: ghcr.io/now-start/evergreen:1.0.17
 
 networks:
-  spring_default:
+  platform_default:
     external: true
   grafana_default:
     external: true

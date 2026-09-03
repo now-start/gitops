@@ -1,20 +1,20 @@
-# Arcane infrastructure stacks
+# Portainer GitOps stacks
 
 This repository is the source of truth for Docker Swarm stacks synchronized by
-Arcane. Each top-level directory is one independently deployed stack.
+Portainer. Each top-level directory is one independently deployed stack.
 
 ## Repository layout
 
 | Stack | Compose path | Purpose | Dependencies |
 | --- | --- | --- | --- |
-| `portainer` | `portainer/compose.yaml` | Portainer CE Swarm management | Synology Docker volume path, NFS |
-| `grafana` | `grafana/compose.yaml` | Grafana LGTM observability | NFS |
-| `spring` | `spring/compose.yaml` | Config, Eureka, Admin, Gateway | `grafana_default` |
-| `chzzk` | `chzzk/compose.yaml` | nyang-nyang-bot | `spring_default`, `grafana_default`, NFS |
-| `evergreen` | `evergreen/compose.yaml` | Lotto and coin services | `spring_default`, `grafana_default` |
-| `bitwarden` | `bitwarden/compose.yaml` | Vaultwarden | NFS |
-| `flame` | `flame/compose.yaml` | Flame dashboard | NFS |
-| `redis` | `redis/compose.yaml` | Redis data store | NFS |
+| `portainer` | `portainer/docker-compose.yml` | Portainer CE Swarm management | Synology Docker volume path, NFS |
+| `grafana` | `grafana/docker-compose.yml` | Grafana LGTM observability | NFS |
+| `platform` | `platform/docker-compose.yml` | Config, Eureka, Admin, Gateway | `grafana_default` |
+| `chzzk` | `chzzk/docker-compose.yml` | nyang-nyang-bot | `platform_default`, `grafana_default`, NFS |
+| `evergreen` | `evergreen/docker-compose.yml` | Lotto and coin services | `platform_default`, `grafana_default` |
+| `bitwarden` | `bitwarden/docker-compose.yml` | Vaultwarden | NFS |
+| `flame` | `flame/docker-compose.yml` | Flame dashboard | NFS |
+| `redis` | `redis/docker-compose.yml` | Redis data store | NFS |
 
 ## New stack template
 
@@ -23,8 +23,8 @@ Copy `_template` when adding a stack, then replace every `REPLACE_*`, `app`,
 Remove the environment or volume section when the service does not need it;
 do not retain placeholder or unused configuration.
 
-The template intentionally follows the repository defaults: the `latest` image
-tag, secret-only environment interpolation, a service-specific liveness
+The template intentionally follows the repository defaults: an explicit image
+version, secret-only environment interpolation, a service-specific liveness
 healthcheck, NFS-backed storage, and the common single-replica Swarm update and
 rollback policy. A healthcheck must test the service itself without depending
 on an external database or API, to avoid cascading restarts.
@@ -43,50 +43,121 @@ a healthcheck.
 Healthchecks are enabled only when the image contains a verified checker:
 Vaultwarden and Grafana use their bundled scripts, Flame uses Node.js, and
 Redis uses an authenticated `PING`. The Spring buildpack images are shell-less
-and currently contain no healthcheck process, so `spring`, `chzzk`, and
+and currently contain no healthcheck process, so `platform`, `chzzk`, and
 `evergreen` must not receive a shell-based check. Add the Paketo health-checker
 at image build time before enabling their Actuator liveness probes in Swarm.
 
-## Arcane Git Sync
+## Portainer GitOps
 
-1. In **Customize -> Git Repositories**, add this repository and configure its
-   SSH key. Keep host-key verification enabled.
-2. Select the Docker Swarm manager environment.
-3. Under **Swarm -> Stacks**, create one Git sync per row in the table above.
-   Use branch `main`, the directory name as the stack name, and the listed
+1. Create Git-backed stacks for `grafana`, `platform`, `chzzk`, `evergreen`,
+   `bitwarden`, `flame`, and `redis`. Keep the `portainer` stack manually
+   managed so a failed self-update cannot disable its own control plane.
+2. Use branch `main`, the directory name as the stack name, and the listed
    Compose path.
-4. Enable automatic synchronization only after the first manual deployment has
-   succeeded.
-5. For a stack that has `.env.example`, create the Git sync first, then copy it
-   into Arcane's `.env` editor and enter its secret values before deploying.
-   Secret variables render as empty during the initial Git validation so the
-   sync can be created; do not treat a successful sync as deployment readiness.
+3. Enter values from each `.env.example` in the Portainer stack environment.
+   Do not commit the real `.env` file.
+4. Complete and verify the first manual deployment.
+5. Enable GitOps automatic updates with five-minute polling. Keep **Re-pull
+   image and redeploy** and **Force redeployment** disabled because application
+   deployments use a changed immutable image tag.
+
+### Compose path migration
+
+This repository uses `docker-compose.yml` for every stack and the template.
+Portainer stores the Compose path configured when a Git-backed stack is created,
+so renaming the repository file does not update an existing stack automatically.
+Before merging this rename, pause polling for every existing Git-backed stack.
+After the merge, change each stack's Compose path from `STACK/compose.yaml` to
+`STACK/docker-compose.yml`. If the installed Portainer version does not allow
+the path to be edited, retain its environment values and recreate the stack
+with the new path. Pull and redeploy each stack manually, verify it is stable,
+and only then re-enable polling.
+
+The `portainer` Compose file remains the reviewed desired state for manual
+updates. Dependabot may propose its version changes, but those changes are not
+automatically deployed.
+
+When applying the initial conversion from mutable tags (`latest` or `lts`) to
+explicit versions, pause automatic updates for the affected Portainer stacks.
+Changing the image string replaces Swarm tasks even when both tags currently
+resolve to the same image digest. Merge the baseline, redeploy and verify one
+stack at a time in the dependency order below, then re-enable polling.
 
 Deploy in this order because the application stacks use networks created by the
 first two stacks:
 
 1. `portainer` and `grafana`
-2. `spring`
+2. `platform`
 3. `chzzk` and `evergreen`
 4. `bitwarden`, `flame`, and `redis`
 
-Arcane redeploys a synchronized stack only when that stack is already running.
-The repository Compose files remain read-only in Arcane; make structural changes
-through Git.
+### `spring` to `platform` migration
+
+The Portainer stack name determines Swarm service and default network names, so
+this rename is not an in-place update. Before merging the rename, disable GitOps
+polling for `spring`, `chzzk`, and `evergreen` and retain their Portainer
+environment values. After the merge:
+
+1. Remove the `chzzk` and `evergreen` stacks so they release `spring_default`.
+2. Remove the old `spring` stack.
+3. Create and verify the `platform` stack from `platform/docker-compose.yml`.
+4. Recreate `chzzk` and `evergreen`; they now attach to `platform_default`.
+5. Re-enable polling after all three stacks are stable.
+
+This migration interrupts the dependent applications. If it fails, revert the
+rename commit and recreate the stacks in the old dependency order.
+
+Treat Git as the only source of stack configuration. Local edits in Portainer
+are overwritten by the next Git pull, so make structural and version changes
+through pull requests in this repository.
 
 ## Image version ownership
 
 Image names and deployment tags are declared directly in each tracked
-`compose.yaml`. Do not move them into Arcane's local `.env`; doing so would make
-the running version invisible to Git Sync.
+`docker-compose.yml`. Do not move them into Portainer's local environment values;
+doing so would make the running version invisible to GitOps review.
 
-Application pipelines should build and push an immutable tag (a release version
-or commit SHA), then update the matching `image:` line in this repository. A push
-to `main` is detected by Arcane Auto Sync and rolls out the changed Swarm service.
-Use `latest` only as the initial value; replace it with immutable tags before
-enabling unattended production updates.
+Application pipelines build and push immutable tags but do not select the
+production version. Dependabot detects newer SemVer image tags and proposes the
+matching `image:` change in this repository. A merge to `main` is detected by
+Portainer polling and rolls out only the changed Swarm service.
 
-## Required Arcane environment values
+## Dependabot image updates
+
+`.github/dependabot.yml` uses one Docker Compose update configuration for all
+eight deployed stack directories, scheduled with a five-minute cron. GitHub may
+start a scheduled Dependabot run later than the nominal time. The normal
+three-day version cooldown is disabled. Each image update remains an independent
+pull request so that deployment and rollback stay scoped to one service. Review
+Portainer Agent and Server compatibility before merging either image update.
+
+Dependabot only opens a pull request. `.github/workflows/validate-compose.yaml`
+renders every deployed Compose file, and a maintainer merges the PR after the
+check succeeds. Portainer deploys the merged desired state on its next poll.
+
+```text
+application main -> test -> image:{version} -> release
+                                      |
+                                      v
+Dependabot -> GitOps PR -> Compose validation -> merge
+                                                   |
+                                                   v
+Portainer polling -> Docker Swarm rolling update
+```
+
+If deployment fails, revert the GitOps version commit. Swarm's
+`failure_action: rollback` can restore runtime tasks, but it does not change the
+version recorded in Git. Add a temporary `ignore` rule for a failed image
+version before reverting so Dependabot does not immediately propose it again:
+
+```yaml
+ignore:
+  - dependency-name: "now-start/gateway"
+    versions:
+      - "6.1.1"
+```
+
+## Required Portainer environment values
 
 Do not commit real values for these variables:
 
@@ -94,25 +165,25 @@ Do not commit real values for these variables:
 | --- | --- |
 | `bitwarden` | `BITWARDEN_SSO_CLIENT_SECRET` |
 | `grafana` | `GRAFANA_OAUTH_CLIENT_SECRET`, `GRAFANA_SMTP_PASSWORD` |
-| `spring` | `SPRING_ENCRYPT_KEY` |
+| `platform` | `SPRING_ENCRYPT_KEY` |
 | `flame` | `FLAME_PASSWORD` |
 | `redis` | `REDIS_PASSWORD` |
 
 Only secret variable names are tracked in `.env.example` templates. Real `.env`
-files contain secrets only and are ignored; keep their values in Arcane. Images,
+files contain secrets only and are ignored; keep their values in Portainer. Images,
 ports, domains, network/storage paths, and other non-sensitive settings belong
 in the tracked Compose files. If a credential was previously committed or
 shared in plain text, rotate it before deployment.
 
 ## Swarm prerequisites
 
-- The selected Arcane environment must be a Swarm manager.
+- The selected Portainer environment must be a Swarm manager.
 - Every Swarm node must expose Docker volumes at `/volume1/@docker/volumes` for the Portainer Agent.
 - The Portainer default overlay uses MTU `1200` to fit VXLAN traffic inside Tailscale.
 - Every stack-owned overlay network uses MTU `1200`; recreate existing networks before redeploying changed stacks.
 - Recreate the Swarm `ingress` network with MTU `1200` before deploying services that publish ports.
-- `grafana_default` must exist before `spring`, `chzzk`, or `evergreen` deploys.
-- `spring_default` must exist before `chzzk` or `evergreen` deploys.
+- `grafana_default` must exist before `platform`, `chzzk`, or `evergreen` deploys.
+- `platform_default` must exist before `chzzk` or `evergreen` deploys.
 - Every eligible node must be able to mount NFSv4 from the `NOW_START` Tailscale address `100.100.1.1`.
 - DSM NFS permissions must allow the Tailscale client range `100.64.0.0/10`.
 - The manager must be authenticated to `ghcr.io` for private images.
@@ -133,22 +204,22 @@ Validate interpolation with temporary, non-production values:
 
 ```sh
 BITWARDEN_SSO_CLIENT_ID=test BITWARDEN_SSO_CLIENT_SECRET=test \
-  docker stack config -c bitwarden/compose.yaml >/dev/null
+  docker stack config -c bitwarden/docker-compose.yml >/dev/null
 
-FLAME_PASSWORD=test docker stack config -c flame/compose.yaml >/dev/null
+FLAME_PASSWORD=test docker stack config -c flame/docker-compose.yml >/dev/null
 
 GRAFANA_OAUTH_CLIENT_ID=test GRAFANA_OAUTH_CLIENT_SECRET=test \
 GRAFANA_SMTP_USER=test GRAFANA_SMTP_PASSWORD=test \
-  docker stack config -c grafana/compose.yaml >/dev/null
+  docker stack config -c grafana/docker-compose.yml >/dev/null
 
-SPRING_ENCRYPT_KEY=test docker stack config -c spring/compose.yaml >/dev/null
+SPRING_ENCRYPT_KEY=test docker stack config -c platform/docker-compose.yml >/dev/null
 
-docker stack config -c chzzk/compose.yaml >/dev/null
-docker stack config -c evergreen/compose.yaml >/dev/null
+docker stack config -c chzzk/docker-compose.yml >/dev/null
+docker stack config -c evergreen/docker-compose.yml >/dev/null
 
-REDIS_PASSWORD=test docker stack config -c redis/compose.yaml >/dev/null
+REDIS_PASSWORD=test docker stack config -c redis/docker-compose.yml >/dev/null
 
-docker stack config -c portainer/compose.yaml >/dev/null
+docker stack config -c portainer/docker-compose.yml >/dev/null
 ```
 
 After deployment, verify the actual scheduler and network state:
@@ -157,7 +228,7 @@ After deployment, verify the actual scheduler and network state:
 docker stack services STACK_NAME
 docker stack ps --no-trunc STACK_NAME
 docker network inspect grafana_default
-docker network inspect spring_default
+docker network inspect platform_default
 docker service ps --no-trunc portainer_agent
 ```
 

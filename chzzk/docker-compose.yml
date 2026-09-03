@@ -1,6 +1,6 @@
 services:
   nyang-nyang-bot:
-    image: ghcr.io/now-start/nyang-nyang-bot:latest
+    image: ghcr.io/now-start/nyang-nyang-bot:5.9.8
     user: root
     environment:
       TZ: Asia/Seoul
@@ -8,7 +8,7 @@ services:
     volumes:
       - chzzk_data:/workspace/key
     networks:
-      - spring_default
+      - platform_default
       - grafana_default
     deploy:
       replicas: 1
@@ -35,7 +35,7 @@ volumes:
       device: :/volume1/docker/chzzk
 
 networks:
-  spring_default:
+  platform_default:
     external: true
   grafana_default:
     external: true
