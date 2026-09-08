@@ -29,7 +29,7 @@ services:
 
   coin:
     <<: *service-defaults
-    image: ghcr.io/now-start/evergreen:2.0.0
+    image: ghcr.io/now-start/evergreen:2.0.1
 
 networks:
   platform_default:
