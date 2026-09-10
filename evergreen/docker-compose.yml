@@ -6,7 +6,7 @@ x-service-defaults: &service-defaults
   networks:
     - platform_default
     - grafana_default
-  deploy:
+  deploy: &deploy-defaults
     replicas: 1
     update_config:
       parallelism: 1
@@ -30,6 +30,11 @@ services:
   coin:
     <<: *service-defaults
     image: ghcr.io/now-start/evergreen:2.1.0
+    deploy:
+      <<: *deploy-defaults
+      placement:
+        constraints:
+          - node.hostname == NOW_START
 
 networks:
   platform_default:

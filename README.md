@@ -44,6 +44,11 @@ node, which corresponds to their current `linux/amd64` images. `eureka` and
 `admin` remain single-replica services. Remove the architecture constraint only
 after both global images are published as multi-platform images.
 
+The `evergreen` stack pins only `coin` to `node.hostname == NOW_START`; `lotto`
+keeps the shared scheduling defaults. If that node is unavailable or drained,
+`coin` cannot fail over to another node. Confirm the node's outbound public IP
+is allowed by the Upbit API key; hostname placement does not guarantee a fixed IP.
+
 ## Health checks
 
 Healthchecks are enabled only when the image contains a verified checker:
