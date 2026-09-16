@@ -36,7 +36,7 @@ x-service-defaults: &service-defaults
 services:
   config:
     <<: *service-defaults
-    image: ghcr.io/now-start/config:2.1.14
+    image: ghcr.io/now-start/config:2.1.15
     deploy:
       <<: *global-deploy-defaults
     environment:
@@ -46,15 +46,15 @@ services:
 
   eureka:
     <<: *service-defaults
-    image: ghcr.io/now-start/eureka:2.4.9
+    image: ghcr.io/now-start/eureka:2.4.10
 
   admin:
     <<: *service-defaults
-    image: ghcr.io/now-start/admin:2.11.7
+    image: ghcr.io/now-start/admin:2.11.8
 
   gateway:
     <<: *service-defaults
-    image: ghcr.io/now-start/gateway:6.1.0
+    image: ghcr.io/now-start/gateway:6.1.1
     deploy:
       <<: *global-deploy-defaults
     ports:
