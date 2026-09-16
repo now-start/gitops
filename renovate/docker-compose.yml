@@ -1,0 +1,62 @@
+services:
+  renovate:
+    image: renovate/renovate:44.93.5
+    # entrypoint 는 그대로 둔다. renovate-entrypoint.sh 는 첫 인자가 실행 가능하면
+    # renovate 를 덧붙이지 않고 containerbase 셋업을 거쳐 그대로 넘긴다.
+    # 루프가 renovate 종료를 기다린 뒤 sleep 하므로 실행이 겹칠 수 없다(flock 불필요).
+    command:
+      - bash
+      - -c
+      - |
+        set -u
+        while true; do
+          # 외부 데드라인. renovate 가 멈추면 루프 전체가 정지해 이후 스캔이 모두
+          # 사라지므로, executionTimeout(자식 프로세스만 대상)이 아니라 호출 전체를
+          # 감싼다. 실패해도 루프는 계속 돌기 때문에 Swarm 은 이 상태를 감지하지
+          # 못한다 — 컨테이너 가동 여부가 아니라 성공한 스캔을 모니터링해야 한다.
+          timeout --kill-after=30s 10m renovate || echo "[warn] renovate failed or timed out (exit=$$?)"
+          sleep "$$SYNC_INTERVAL"
+        done
+    environment:
+      TZ: Asia/Seoul
+      SYNC_INTERVAL: "60"
+      RENOVATE_PLATFORM: github
+      RENOVATE_REPOSITORIES: now-start/gitops
+      RENOVATE_AUTODISCOVER: "false"
+      RENOVATE_GIT_AUTHOR: renovate-bot <renovate-bot@nowstart.org>
+      # 캐시 영속화. 1분 주기에서는 선택이 아니라 필수다. 캐시가 없으면 매 실행이
+      # 콜드로 돌며 레지스트리를 새로 조회해 Docker Hub rate limit 위험이 생긴다.
+      RENOVATE_BASE_DIR: /tmp/renovate
+      RENOVATE_TOKEN: ${RENOVATE_TOKEN:-}
+      LOG_LEVEL: info
+    volumes:
+      - renovate_cache:/tmp/renovate
+    networks:
+      - default
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+        monitor: 3m
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: pause
+        monitor: 3m
+      restart_policy:
+        condition: any
+        delay: 5s
+
+# 재생성 가능한 캐시라 NFS 내구성이 필요 없고, 컨테이너가 uid 12021(ubuntu) 로
+# 돌기 때문에 NFS 권한 매핑을 맞추는 수고도 피한다.
+volumes:
+  renovate_cache:
+    driver: local
+
+networks:
+  default:
+    driver: overlay
+    driver_opts:
+      com.docker.network.driver.mtu: "1200"

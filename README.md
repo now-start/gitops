@@ -15,6 +15,7 @@ Portainer. Each top-level directory is one independently deployed stack.
 | `bitwarden` | `bitwarden/docker-compose.yml` | Vaultwarden | NFS |
 | `flame` | `flame/docker-compose.yml` | Flame dashboard | NFS |
 | `redis` | `redis/docker-compose.yml` | Redis data store | NFS |
+| `renovate` | `renovate/docker-compose.yml` | Self-hosted Renovate that updates this repository's image tags | none |
 
 ## New stack template
 
@@ -85,7 +86,7 @@ with the new path. Pull and redeploy each stack manually, verify it is stable,
 and only then re-enable polling.
 
 The `portainer` Compose file remains the reviewed desired state for manual
-updates. Dependabot may propose its version changes, but those changes are not
+updates. Renovate may propose its version changes, but those changes are not
 automatically deployed.
 
 When applying the initial conversion from mutable tags (`latest` or `lts`) to
@@ -129,44 +130,88 @@ Image names and deployment tags are declared directly in each tracked
 doing so would make the running version invisible to GitOps review.
 
 Application pipelines build and push immutable tags but do not select the
-production version. Dependabot detects newer SemVer image tags and proposes the
+production version. Renovate detects newer SemVer image tags and applies the
 matching `image:` change in this repository. A merge to `main` is detected by
 Portainer polling and rolls out only the changed Swarm service.
 
-## Dependabot image updates
+## Renovate image updates
 
-`.github/dependabot.yml` uses one Docker Compose update configuration for all
-eight deployed stack directories, scheduled every day at 09:00 Asia/Seoul.
-GitHub may start a scheduled Dependabot run later than the nominal time. The
-normal three-day version cooldown is disabled. Each image update remains an
-independent pull request so that deployment and rollback stay scoped to one
-service. Review Portainer Agent and Server compatibility before merging either
-image update.
+A self-hosted Renovate runs in the `renovate` stack and scans this repository
+every 60 seconds. It replaces both the Mend-hosted Renovate app and Dependabot,
+which previously overlapped on the same Docker Compose files.
 
-Dependabot only opens a pull request. `.github/workflows/validate-compose.yaml`
-renders every deployed Compose file, and a maintainer merges the PR after the
-check succeeds. Portainer deploys the merged desired state on its next poll.
+`renovate.json` is unchanged: one policy applies to every image, whether it comes
+from our own registry or a third party. Minor and patch updates automerge once
+`.github/workflows/validate-compose.yaml` has rendered every deployed Compose file
+on the pull request. Major updates keep their pull request open for a maintainer,
+because a major bump can require a matching configuration change.
+
+Automerge happens on a later scan than the one that opened the pull request, since
+`platformAutomerge` is off and Renovate merges it itself once the check is green.
+At a 60 second interval that costs roughly one extra minute.
+
+`_template` is excluded. Each image update stays an independent change so that
+deployment and rollback remain scoped to one service. Minor and patch updates are
+CI-gated rather than human-reviewed; if Portainer Agent and Server compatibility
+must be checked by a person, add a rule that keeps those two images off automerge.
+
+### Migrating from the Mend app
+
+Only one Renovate may write to this repository, so the Mend-hosted app has to go
+before the stack starts writing. Verify first with a throwaway container rather
+than by deploying the stack in dry-run mode, so that no Compose change is needed:
+
+```bash
+docker run --rm \
+  -e RENOVATE_TOKEN="$RENOVATE_TOKEN" \
+  -e RENOVATE_PLATFORM=github \
+  -e RENOVATE_REPOSITORIES=now-start/gitops \
+  -e RENOVATE_AUTODISCOVER=false \
+  -e RENOVATE_DRY_RUN=full \
+  renovate/renovate:44.93.5
+```
+
+Expect `Dependency extraction complete` with a docker-compose file and dependency
+count, and no config warnings. Then uninstall the Mend app for this repository and
+only afterwards deploy the `renovate` stack. Any pull request left behind by the
+app has a different bot author, so set `ignorePrAuthor: true` for one run if those
+need to be adopted rather than recreated.
+
+Never run the container without `RENOVATE_DRY_RUN` for a smoke test: with the token
+present it will push branches and open pull requests for real.
 
 ```text
 application main -> test -> image:{version} -> release
                                       |
                                       v
-Dependabot -> GitOps PR -> Compose validation -> merge
+Renovate (60s) -> PR -> Compose validation -> automerge (minor/patch)
+                                            -> maintainer  (major)
                                                    |
                                                    v
 Portainer polling -> Docker Swarm rolling update
 ```
 
+Typical end-to-end delay is under ten minutes: the loop sleeps 60 seconds after
+each run finishes, so the effective interval is the run time plus 60 seconds; a
+minor or patch update needs one scan to open the pull request and a later one to
+merge it, and Portainer then polls within five minutes. This is a typical figure
+and not an upper bound -- a slow run, a retry, a backlog, a failing check or a
+failed run pushes it out.
+
 If deployment fails, revert the GitOps version commit. Swarm's
 `failure_action: rollback` can restore runtime tasks, but it does not change the
-version recorded in Git. Add a temporary `ignore` rule for a failed image
-version before reverting so Dependabot does not immediately propose it again:
+version recorded in Git. Add a temporary `packageRules` entry for a failed image
+version before reverting so Renovate does not immediately propose it again:
 
-```yaml
-ignore:
-  - dependency-name: "now-start/gateway"
-    versions:
-      - "6.1.1"
+```json
+{
+  "packageRules": [
+    {
+      "matchPackageNames": ["ghcr.io/now-start/gateway"],
+      "allowedVersions": "!/^6\\.1\\.1$/"
+    }
+  ]
+}
 ```
 
 ## Required Portainer environment values
@@ -180,6 +225,7 @@ Do not commit real values for these variables:
 | `platform` | `SPRING_ENCRYPT_KEY` |
 | `flame` | `FLAME_PASSWORD` |
 | `redis` | `REDIS_PASSWORD` |
+| `renovate` | `RENOVATE_TOKEN` |
 
 Only secret variable names are tracked in `.env.example` templates. Real `.env`
 files contain secrets only and are ignored; keep their values in Portainer. Images,
