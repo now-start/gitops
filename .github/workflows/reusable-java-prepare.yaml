@@ -85,7 +85,7 @@ jobs:
           echo "✅ Detected Java version: $VERSION ($BUILD_FILE)"
 
       - name: Set up JDK ${{ steps.java-info.outputs.version }}
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
         with:
           java-version: ${{ steps.java-info.outputs.version }}
           distribution: 'temurin'
