@@ -165,9 +165,9 @@ on the pull request. Major updates keep their pull request open for a maintainer
 because a major bump can require a matching configuration change.
 
 The `github-actions` manager also updates action and reusable-workflow references
-in `.github/workflows/`. These updates keep the default `automerge: false` and
-require manual review after `Validate Workflows` passes. The Compose-only
-automerge rule does not apply to them.
+in `.github/workflows/`. Like Docker Compose, minor and patch updates automerge
+after `Validate Workflows` and other applicable checks pass. Major and digest-only
+updates open pull requests for manual review and merge.
 
 Automerge happens on a later scan than the one that opened the pull request, since
 `platformAutomerge` is off and Renovate merges it itself once the check is green.
