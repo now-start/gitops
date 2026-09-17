@@ -10,8 +10,8 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
-@test "docker workflow pushes only the immutable version tag" {
-  run grep -F 'docker push "$IMAGE_NAME:$VERSION"' \
+@test "docker workflow publishes a versioned manifest without mutable aliases" {
+  run grep -F 'docker buildx imagetools create --tag "$FINAL_IMAGE"' \
     "$WORKFLOWS_DIR/reusable-java-docker.yaml"
   [ "$status" -eq 0 ]
 
