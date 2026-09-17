@@ -139,7 +139,7 @@ jobs:
             jq -e --arg arch "$ARCH" --arg sha "$SOURCE_SHA" '
               .[0].Os == "linux" and .[0].Architecture == $arch and
               .[0].Config.Labels["org.opencontainers.image.revision"] == $sha'
-          docker run --rm --entrypoint /cnb/lifecycle/launcher "$ARCH_IMAGE" java -version
+          docker run --rm --entrypoint /cnb/lifecycle/launcher "$ARCH_IMAGE" -- java -version
           docker push "$ARCH_IMAGE"
 
   publish:
@@ -187,7 +187,8 @@ jobs:
             verify_index "$MANIFEST_OUTPUT"
             echo "Reusing verified immutable multi-platform image: $FINAL_IMAGE"
             exit 0
-          elif ! grep -qiE 'manifest unknown|no such manifest|manifest.*not found' <<< "$MANIFEST_OUTPUT"; then
+          elif ! grep -qiE 'manifest unknown|no such manifest|manifest.*not found' <<< "$MANIFEST_OUTPUT" &&
+               ! grep -Fxq "ERROR: $FINAL_IMAGE: not found" <<< "$MANIFEST_OUTPUT"; then
             echo "$MANIFEST_OUTPUT"
             exit 1
           fi
