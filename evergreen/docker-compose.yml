@@ -25,7 +25,7 @@ x-service-defaults: &service-defaults
 services:
   lotto:
     <<: *service-defaults
-    image: ghcr.io/now-start/lotto-service:9.4.0
+    image: ghcr.io/now-start/lotto-service:9.4.1
 
   coin:
     <<: *service-defaults
