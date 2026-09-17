@@ -1,0 +1,112 @@
+name: Reusable Release Prepare
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Project version from Gradle or pyproject.toml
+        required: true
+        type: string
+      tag-prefix:
+        description: Optional module prefix without the separating dash
+        type: string
+        default: ''
+    outputs:
+      version:
+        description: Validated project SemVer
+        value: ${{ jobs.prepare.outputs.version }}
+      tag-name:
+        description: Git tag including optional module prefix
+        value: ${{ jobs.prepare.outputs.tag-name }}
+      prerelease:
+        description: Whether this is an alpha, beta, or RC release
+        value: ${{ jobs.prepare.outputs.prerelease }}
+      source-sha:
+        description: Commit associated with the version
+        value: ${{ jobs.prepare.outputs.source-sha }}
+      tag-exists:
+        description: Whether the version Git tag exists
+        value: ${{ jobs.prepare.outputs.tag-exists }}
+      release-exists:
+        description: Whether a matching published release exists
+        value: ${{ jobs.prepare.outputs.release-exists }}
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag-name: ${{ steps.version.outputs.tag-name }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      source-sha: ${{ steps.state.outputs.source-sha }}
+      tag-exists: ${{ steps.state.outputs.tag-exists }}
+      release-exists: ${{ steps.state.outputs.release-exists }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Validate release version
+        id: version
+        env:
+          VERSION: ${{ inputs.version }}
+          TAG_PREFIX: ${{ inputs.tag-prefix }}
+        run: |
+          NUMBER='(0|[1-9][0-9]*)'
+          PATTERN="^${NUMBER}\.${NUMBER}\.${NUMBER}(-(alpha|beta|rc)\.${NUMBER})?$"
+          if [[ ! "$VERSION" =~ $PATTERN ]] || [ "${#VERSION}" -gt 128 ]; then
+            echo 'Use MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-alpha.N/beta.N/rc.N (max 128 characters)' >&2
+            exit 1
+          fi
+          if [[ ! "$TAG_PREFIX" =~ ^([a-zA-Z0-9][a-zA-Z0-9_.-]*)?$ ]]; then
+            echo 'Invalid module tag prefix' >&2
+            exit 1
+          fi
+          PRERELEASE=false
+          [[ "$VERSION" != *-* ]] || PRERELEASE=true
+          {
+            echo "version=$VERSION"
+            echo "tag-name=${TAG_PREFIX:+$TAG_PREFIX-}$VERSION"
+            echo "prerelease=$PRERELEASE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check release state
+        id: state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.version.outputs.tag-name }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          TAGS=$(git ls-remote --tags origin "refs/tags/$TAG_NAME" "refs/tags/$TAG_NAME^{}")
+          TAG_SHA=$(awk 'NR == 1 { sha = $1 } /\^\{\}$/ { sha = $1 } END { print sha }' <<< "$TAGS")
+          SOURCE_SHA=${TAG_SHA:-$GITHUB_SHA}
+          RELEASE_FILE="$RUNNER_TEMP/release-state.json"
+          HTTP_STATUS=$(curl --fail-with-body --silent --show-error --output "$RELEASE_FILE" \
+            --write-out '%{http_code}' \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$TAG_NAME") || {
+              [ "$HTTP_STATUS" = '404' ] || exit 1
+            }
+          RELEASE_EXISTS=false
+          case "$HTTP_STATUS" in
+            200)
+              [ -n "$TAG_SHA" ] || { echo 'Release has no matching Git tag' >&2; exit 1; }
+              jq -e --argjson prerelease "$PRERELEASE" \
+                '.draft == false and .prerelease == $prerelease' "$RELEASE_FILE" >/dev/null
+              RELEASE_EXISTS=true
+              ;;
+            404) ;;
+            *) echo "Cannot read release state: HTTP $HTTP_STATUS" >&2; exit 1 ;;
+          esac
+
+          TAG_EXISTS=false
+          [ -z "$TAG_SHA" ] || TAG_EXISTS=true
+          {
+            echo "release-exists=$RELEASE_EXISTS"
+            echo "source-sha=$SOURCE_SHA"
+            echo "tag-exists=$TAG_EXISTS"
+          } >> "$GITHUB_OUTPUT"

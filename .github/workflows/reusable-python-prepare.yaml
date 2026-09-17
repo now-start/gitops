@@ -1,0 +1,60 @@
+name: Reusable Python Prepare
+
+on:
+  workflow_call:
+    outputs:
+      version:
+        description: Validated project SemVer
+        value: ${{ jobs.policy.outputs.version }}
+      tag-name:
+        description: Git tag including optional module prefix
+        value: ${{ jobs.policy.outputs.tag-name }}
+      prerelease:
+        description: Whether this is an alpha, beta, or RC release
+        value: ${{ jobs.policy.outputs.prerelease }}
+      source-sha:
+        description: Commit associated with the version
+        value: ${{ jobs.policy.outputs.source-sha }}
+      tag-exists:
+        description: Whether the version Git tag exists
+        value: ${{ jobs.policy.outputs.tag-exists }}
+      release-exists:
+        description: Whether a matching published release exists
+        value: ${{ jobs.policy.outputs.release-exists }}
+      image:
+        description: GHCR image name
+        value: ${{ jobs.metadata.outputs.image }}
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      image: ${{ steps.version.outputs.image }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Read project metadata
+        id: version
+        run: |
+          python3 - <<'PY'
+          import os
+          import tomllib
+
+          with open('pyproject.toml', 'rb') as source:
+              version = tomllib.load(source)['project']['version']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={version}\n')
+              output.write(f'image=ghcr.io/{os.environ["GITHUB_REPOSITORY"].lower()}\n')
+          PY
+
+  policy:
+    needs: metadata
+    uses: ./.github/workflows/reusable-release-prepare.yaml
+    with:
+      version: ${{ needs.metadata.outputs.version }}

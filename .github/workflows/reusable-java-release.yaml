@@ -1,0 +1,34 @@
+name: Reusable Java Release
+
+on:
+  workflow_call:
+    inputs:
+      tag-name:
+        description: Git tag including optional module prefix
+        required: true
+        type: string
+      prerelease:
+        description: Whether to publish a GitHub prerelease
+        type: string
+        default: 'false'
+      source-sha:
+        description: Commit that the Git tag must reference
+        required: true
+        type: string
+    secrets:
+      github-token:
+        description: GitHub token for viewing and creating releases
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    uses: ./.github/workflows/reusable-release.yaml
+    with:
+      tag-name: ${{ inputs.tag-name }}
+      prerelease: ${{ inputs.prerelease }}
+      source-sha: ${{ inputs.source-sha }}
+    secrets:
+      github-token: ${{ secrets.github-token }}

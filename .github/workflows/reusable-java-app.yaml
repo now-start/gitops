@@ -1,0 +1,77 @@
+name: Reusable Java App Orchestrator
+
+on:
+  workflow_call:
+    inputs:
+      registry-org:
+        description: 'Registry organization/namespace (e.g., ghcr.io/now-start)'
+        required: false
+        type: string
+        default: 'ghcr.io/now-start'
+      module:
+        description: 'Gradle submodule name (e.g., config-service). Empty for single-module projects.'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      registry-password:
+        description: 'Registry password/token'
+        required: true
+
+concurrency:
+  group: ${{ github.repository }}-${{ inputs.module || 'root' }}-${{ github.event_name }}-${{ github.ref }}-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test-only:
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref != 'refs/heads/main')
+    uses: ./.github/workflows/reusable-java-test.yaml
+    with:
+      module: ${{ inputs.module }}
+
+  prepare:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/reusable-java-prepare.yaml
+    with:
+      module: ${{ inputs.module }}
+
+  build:
+    if: needs.prepare.outputs.tag-exists == 'false'
+    needs: prepare
+    uses: ./.github/workflows/reusable-java-test.yaml
+    with:
+      java-version: ${{ needs.prepare.outputs.java-version }}
+      module: ${{ inputs.module }}
+
+  docker:
+    if: needs.prepare.outputs.tag-exists == 'false'
+    needs: [prepare, build]
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/reusable-java-docker.yaml
+    with:
+      registry-org: ${{ inputs.registry-org }}
+      version: ${{ needs.prepare.outputs.version }}
+      java-version: ${{ needs.prepare.outputs.java-version }}
+      module: ${{ inputs.module }}
+      source-sha: ${{ needs.prepare.outputs.source-sha }}
+      tag-exists: ${{ needs.prepare.outputs.tag-exists }}
+    secrets:
+      registry-password: ${{ secrets.registry-password }}
+
+  release:
+    if: needs.prepare.outputs.tag-exists == 'false'
+    needs: [prepare, docker]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/reusable-java-release.yaml
+    with:
+      tag-name: ${{ needs.prepare.outputs.tag-name }}
+      prerelease: ${{ needs.prepare.outputs.prerelease }}
+      source-sha: ${{ needs.prepare.outputs.source-sha }}
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}

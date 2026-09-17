@@ -1,0 +1,105 @@
+name: Reusable Java Test
+
+on:
+  workflow_call:
+    inputs:
+      java-version:
+        description: 'Java version (if not specified, it will be detected from build.gradle)'
+        required: false
+        type: string
+      distribution:
+        description: 'JDK distribution'
+        required: false
+        type: string
+        default: 'temurin'
+      module:
+        description: 'Gradle submodule name (e.g., config-service). Empty for single-module projects.'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Validate module name
+        if: ${{ inputs.module != '' }}
+        env:
+          MODULE: ${{ inputs.module }}
+        run: |
+          if [[ ! "$MODULE" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+            echo "❌ Error: Invalid module name '$MODULE'. Only alphanumeric, dash, underscore, and dot are allowed."
+            exit 1
+          fi
+
+      - name: Detect Java version
+        id: java-info
+        env:
+          INPUT_JAVA_VERSION: ${{ inputs.java-version }}
+          MODULE: ${{ inputs.module }}
+        run: |
+          if [ -n "$INPUT_JAVA_VERSION" ]; then
+            VERSION="$INPUT_JAVA_VERSION"
+          else
+            BUILD_FILES=()
+            if [ -n "$MODULE" ]; then
+              BUILD_FILES+=("$MODULE/build.gradle" "$MODULE/build.gradle.kts")
+            fi
+            BUILD_FILES+=("build.gradle" "build.gradle.kts")
+
+            for BUILD_FILE in "${BUILD_FILES[@]}"; do
+              [ -f "$BUILD_FILE" ] || continue
+
+              VERSION=$(grep -Eo "JavaLanguageVersion.of\([0-9]+\)" "$BUILD_FILE" | head -1 | sed -E 's/[^0-9]//g')
+              VERSION=${VERSION:-$(grep -Eo "(source|target)Compatibility[[:space:]]*=[[:space:]]*['\"]?[0-9]+['\"]?" "$BUILD_FILE" | head -1 | sed -E 's/[^0-9]//g')}
+              VERSION=${VERSION:-$(grep -Eo "JavaVersion\.VERSION_[0-9]+" "$BUILD_FILE" | head -1 | sed -E 's/[^0-9]//g')}
+
+              if [ -n "$VERSION" ]; then
+                break
+              fi
+            done
+
+            if [ -z "$VERSION" ]; then
+              echo "❌ Error: Could not extract Java version from Gradle build files: ${BUILD_FILES[*]}"
+              exit 1
+            fi
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [ -n "${BUILD_FILE:-}" ]; then
+            echo "✅ Detected Java version: $VERSION ($BUILD_FILE)"
+          else
+            echo "✅ Detected Java version: $VERSION"
+          fi
+
+      - name: Set up JDK ${{ steps.java-info.outputs.version }}
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          java-version: ${{ steps.java-info.outputs.version }}
+          distribution: ${{ inputs.distribution }}
+          cache: 'gradle'
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Build and test
+        env:
+          MODULE: ${{ inputs.module }}
+        run: |
+          GRADLE_TASK="${MODULE:+:$MODULE:}build"
+          ./gradlew "$GRADLE_TASK" --build-cache --parallel -Dorg.gradle.jvmargs="-Xmx2g"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### 🧪 Test Result"
+            echo "- **Java**: \`${{ steps.java-info.outputs.version }}\`"
+            echo "- **Status**: ${{ job.status == 'success' && '✅ Success' || '❌ Failed' }}"
+          } >> "$GITHUB_STEP_SUMMARY"

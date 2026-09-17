@@ -1,0 +1,18 @@
+name: App CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  app:
+    uses: now-start/gitops/.github/workflows/reusable-python-app.yaml@main
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}

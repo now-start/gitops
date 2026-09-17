@@ -1,7 +1,25 @@
-# Portainer GitOps stacks
+# Portainer GitOps stacks and shared CI
 
 This repository is the source of truth for Docker Swarm stacks synchronized by
-Portainer. Each top-level directory is one independently deployed stack.
+Portainer and the shared Java/Python application CI workflows. The stack
+directories listed below are deployed independently.
+
+## Shared application CI
+
+Applications call `.github/workflows/reusable-java-app.yaml` or
+`.github/workflows/reusable-python-app.yaml` from `now-start/gitops@main`.
+See [the shared workflow guide](docs/shared-workflows.md) and `examples/` for
+inputs, secrets, and caller configurations.
+
+Pull requests run application tests. Main pushes publish immutable versioned
+images and releases only when the application's version tag does not exist.
+The application repository remains the checkout and image/release owner.
+
+`Validate Workflows` runs actionlint and the existing Bats contract tests on
+workflow, test, example, and Renovate configuration changes. Run the same checks
+locally with `bash tests/run_tests.sh` (requires actionlint, Bats, Ruby, and jq).
+The previous `now-start/workflow` repository is retained for migration
+compatibility; new callers should use this repository.
 
 ## Repository layout
 
@@ -15,7 +33,7 @@ Portainer. Each top-level directory is one independently deployed stack.
 | `bitwarden` | `bitwarden/docker-compose.yml` | Vaultwarden | NFS |
 | `flame` | `flame/docker-compose.yml` | Flame dashboard | NFS |
 | `redis` | `redis/docker-compose.yml` | Redis data store | NFS |
-| `renovate` | `renovate/docker-compose.yml` | Self-hosted Renovate that updates this repository's image tags | none |
+| `renovate` | `renovate/docker-compose.yml` | Self-hosted Renovate that updates image tags and GitHub Actions dependencies | none |
 
 ## New stack template
 
@@ -134,17 +152,22 @@ production version. Renovate detects newer SemVer image tags and applies the
 matching `image:` change in this repository. A merge to `main` is detected by
 Portainer polling and rolls out only the changed Swarm service.
 
-## Renovate image updates
+## Renovate dependency updates
 
 A self-hosted Renovate runs in the `renovate` stack and scans this repository
 every 60 seconds. It replaces both the Mend-hosted Renovate app and Dependabot,
 which previously overlapped on the same Docker Compose files.
 
-`renovate.json` is unchanged: one policy applies to every image, whether it comes
+For Docker Compose, one policy applies to every image, whether it comes
 from our own registry or a third party. Minor and patch updates automerge once
 `.github/workflows/validate-compose.yaml` has rendered every deployed Compose file
 on the pull request. Major updates keep their pull request open for a maintainer,
 because a major bump can require a matching configuration change.
+
+The `github-actions` manager also updates action and reusable-workflow references
+in `.github/workflows/`. These updates keep the default `automerge: false` and
+require manual review after `Validate Workflows` passes. The Compose-only
+automerge rule does not apply to them.
 
 Automerge happens on a later scan than the one that opened the pull request, since
 `platformAutomerge` is off and Renovate merges it itself once the check is green.
