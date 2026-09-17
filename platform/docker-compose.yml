@@ -50,7 +50,7 @@ services:
 
   admin:
     <<: *service-defaults
-    image: ghcr.io/now-start/admin:2.11.8
+    image: ghcr.io/now-start/admin:2.11.9
 
   gateway:
     <<: *service-defaults
