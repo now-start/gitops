@@ -89,6 +89,19 @@ Git tag:       5.9.8
 Docker image:  ghcr.io/now-start/{repository}:5.9.8
 ```
 
+## Java 멀티 아키텍처 이미지
+
+Java 이미지는 `ubuntu-24.04`(AMD64), `ubuntu-24.04-arm`(ARM64) 러너에서
+각각 `bootBuildImage --imagePlatform`으로 빌드합니다. 프로젝트의 builder/run image는
+두 아키텍처를 지원해야 합니다. Gradle에 지정한 run image는 유지합니다.
+
+- 중간 이미지: `build-{source-sha}-amd64`, `build-{source-sha}-arm64`
+- 배포 이미지: `{version}` (두 아키텍처를 포함한 manifest index)
+- 두 빌드 성공 후 각 이미지의 실제 플랫폼과 OCI revision을 검증하고 digest로 묶습니다.
+- 기존 버전 태그는 덮어쓰지 않습니다. 두 아키텍처와 소스 커밋이 모두 맞을 때만 재사용합니다.
+- 기존 AMD64 전용 태그를 전환하려면 애플리케이션 버전을 올려 새 이미지를 발행합니다.
+- ARM64 지원 태그가 레지스트리에 발행된 것을 확인한 뒤 Swarm의 x86_64 전용 배치 제약을 제거합니다.
+
 ## Python/uv
 
 `examples/build-python.yaml`처럼 `reusable-python-app.yaml@main`을 호출합니다.

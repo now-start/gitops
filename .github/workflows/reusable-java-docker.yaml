@@ -40,10 +40,21 @@ permissions:
 
 jobs:
   docker:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.source-sha }}
 
       - name: Set up JDK ${{ inputs.java-version }}
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
@@ -75,81 +86,129 @@ jobs:
 
           echo "IMAGE_NAME=$IMAGE_NAME" >> "$GITHUB_ENV"
 
-      - name: Build and Push Docker image
+      - name: Build and push architecture image
         env:
           REGISTRY_PASSWORD: ${{ secrets.registry-password }}
+          REGISTRY_USER: ${{ github.actor }}
+          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
           VERSION: ${{ inputs.version }}
           MODULE: ${{ inputs.module }}
           SOURCE_SHA: ${{ inputs.source-sha }}
           TAG_EXISTS: ${{ inputs.tag-exists }}
+          ARCH: ${{ matrix.arch }}
         run: |
+          set -euo pipefail
           GRADLE_TASK="${MODULE:+:$MODULE:}bootBuildImage"
-          REGISTRY_HOST="${IMAGE_NAME%%/*}"
+          ARCH_IMAGE="$IMAGE_NAME:build-$SOURCE_SHA-$ARCH"
+          echo "$REGISTRY_PASSWORD" | docker login "${IMAGE_NAME%%/*}" -u "$REGISTRY_USER" --password-stdin
 
-          echo "🔐 Logging in to $REGISTRY_HOST"
-          echo "$REGISTRY_PASSWORD" | docker login "$REGISTRY_HOST" -u ${{ github.actor }} --password-stdin
-
-          set +e
-          MANIFEST_OUTPUT=$(docker manifest inspect "$IMAGE_NAME:$VERSION" 2>&1)
-          MANIFEST_STATUS=$?
-          set -e
-
-          if [ "$MANIFEST_STATUS" -eq 0 ]; then
-            REMOTE_REVISION=$(docker buildx imagetools inspect "$IMAGE_NAME:$VERSION" \
-              --format '{{json .Image.Config.Labels}}' \
-              | jq -r '.["org.opencontainers.image.revision"] // empty')
-            if [ "$REMOTE_REVISION" != "$SOURCE_SHA" ]; then
-              echo "❌ Existing image $IMAGE_NAME:$VERSION belongs to revision '${REMOTE_REVISION:-unknown}', expected $SOURCE_SHA"
-              exit 1
-            fi
-
-            echo "✅ Reusing immutable image: $IMAGE_NAME:$VERSION ($SOURCE_SHA)"
-            {
-              echo "### 🐳 Docker Images"
-              echo "- \`$IMAGE_NAME:$VERSION\` (existing image reused)"
-            } >> "$GITHUB_STEP_SUMMARY"
+          # The publish job validates both architectures before reusing a final tag.
+          if MANIFEST_OUTPUT=$(docker manifest inspect "$IMAGE_NAME:$VERSION" 2>&1); then
+            echo "Final tag already exists; deferring validation to publish job"
             exit 0
+          elif ! grep -qiE 'manifest unknown|no such manifest|manifest.*not found' <<< "$MANIFEST_OUTPUT"; then
+            echo "$MANIFEST_OUTPUT"
+            exit 1
+          fi
+          if [ "$TAG_EXISTS" = "true" ]; then
+            echo "Git tag exists but immutable image is missing: $IMAGE_NAME:$VERSION"
+            exit 1
           fi
 
-          if ! grep -qiE 'manifest unknown|no such manifest|manifest.*not found' <<< "$MANIFEST_OUTPUT"; then
-            echo "❌ Could not verify whether $IMAGE_NAME:$VERSION exists"
+          if MANIFEST_OUTPUT=$(docker manifest inspect "$ARCH_IMAGE" 2>&1); then
+            docker buildx imagetools inspect "$ARCH_IMAGE" --format '{{json .Image}}' |
+              jq -e --arg arch "$ARCH" --arg sha "$SOURCE_SHA" '
+                .os == "linux" and .architecture == $arch and
+                .config.Labels["org.opencontainers.image.revision"] == $sha'
+            echo "Reusing architecture image: $ARCH_IMAGE"
+            exit 0
+          elif ! grep -qiE 'manifest unknown|no such manifest|manifest.*not found' <<< "$MANIFEST_OUTPUT"; then
             echo "$MANIFEST_OUTPUT"
             exit 1
           fi
 
-          if [ "$TAG_EXISTS" = "true" ]; then
-            echo "❌ Git tag already exists but immutable image is missing: $IMAGE_NAME:$VERSION"
-            exit 1
-          fi
-
-          echo "🏗️ Building Docker image: $IMAGE_NAME:$VERSION"
           ./gradlew "$GRADLE_TASK" \
-            --imageName="$IMAGE_NAME:$VERSION" \
+            --imageName="$ARCH_IMAGE" \
+            --imagePlatform="linux/$ARCH" \
             --build-cache \
             -Dorg.gradle.jvmargs="-Xmx2g" \
-            --environment "BP_OCI_SOURCE=${{ github.server_url }}/${{ github.repository }}" \
+            --environment "BP_OCI_SOURCE=$SOURCE_URL" \
             --environment "BP_OCI_REVISION=$SOURCE_SHA"
 
-          LOCAL_REVISION=$(docker image inspect "$IMAGE_NAME:$VERSION" \
-            --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')
-          if [ "$LOCAL_REVISION" != "$SOURCE_SHA" ]; then
-            echo "❌ Built image revision '$LOCAL_REVISION' does not match $SOURCE_SHA"
+          docker image inspect "$ARCH_IMAGE" |
+            jq -e --arg arch "$ARCH" --arg sha "$SOURCE_SHA" '
+              .[0].Os == "linux" and .[0].Architecture == $arch and
+              .[0].Config.Labels["org.opencontainers.image.revision"] == $sha'
+          docker run --rm --entrypoint /cnb/lifecycle/launcher "$ARCH_IMAGE" java -version
+          docker push "$ARCH_IMAGE"
+
+  publish:
+    needs: docker
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      REGISTRY_ORG: ${{ inputs.registry-org }}
+      REPO_NAME: ${{ github.event.repository.name }}
+      MODULE: ${{ inputs.module }}
+      VERSION: ${{ inputs.version }}
+      SOURCE_SHA: ${{ inputs.source-sha }}
+      TAG_EXISTS: ${{ inputs.tag-exists }}
+    steps:
+      - name: Publish and verify multi-platform image
+        env:
+          REGISTRY_PASSWORD: ${{ secrets.registry-password }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          IMAGE_NAME="$REGISTRY_ORG/${MODULE:-$REPO_NAME}"
+          FINAL_IMAGE="$IMAGE_NAME:$VERSION"
+          echo "$REGISTRY_PASSWORD" | docker login "${IMAGE_NAME%%/*}" -u "$REGISTRY_USER" --password-stdin
+
+          verify_revision() {
+            docker buildx imagetools inspect "$1" --format '{{json .Image}}' |
+              jq -e --arg arch "$2" --arg sha "$SOURCE_SHA" '
+                .os == "linux" and .architecture == $arch and
+                .config.Labels["org.opencontainers.image.revision"] == $sha'
+          }
+
+          verify_index() {
+            local manifest="$1" arch digest
+            jq -e '
+              [.manifests[] | .platform | .os + "/" + .architecture] | sort ==
+              ["linux/amd64", "linux/arm64"]' <<< "$manifest"
+            for arch in amd64 arm64; do
+              digest=$(jq -er --arg arch "$arch" '
+                .manifests[] | select(.platform.architecture == $arch) | .digest' <<< "$manifest")
+              verify_revision "$IMAGE_NAME@$digest" "$arch"
+            done
+          }
+
+          if MANIFEST_OUTPUT=$(docker buildx imagetools inspect "$FINAL_IMAGE" --raw 2>&1); then
+            verify_index "$MANIFEST_OUTPUT"
+            echo "Reusing verified immutable multi-platform image: $FINAL_IMAGE"
+            exit 0
+          elif ! grep -qiE 'manifest unknown|no such manifest|manifest.*not found' <<< "$MANIFEST_OUTPUT"; then
+            echo "$MANIFEST_OUTPUT"
+            exit 1
+          fi
+          if [ "$TAG_EXISTS" = "true" ]; then
+            echo "Git tag exists but immutable image is missing: $FINAL_IMAGE"
             exit 1
           fi
 
-          echo "🚀 Pushing immutable version image"
-          docker push "$IMAGE_NAME:$VERSION"
-
+          SOURCES=()
+          for arch in amd64 arm64; do
+            ARCH_IMAGE="$IMAGE_NAME:build-$SOURCE_SHA-$arch"
+            descriptor=$(docker manifest inspect --verbose "$ARCH_IMAGE")
+            digest=$(jq -er '.Descriptor.digest' <<< "$descriptor")
+            # Pin the manifest input to the exact image whose revision was checked.
+            verify_revision "$IMAGE_NAME@$digest" "$arch"
+            SOURCES+=("$IMAGE_NAME@$digest")
+          done
+          docker buildx imagetools create --tag "$FINAL_IMAGE" "${SOURCES[@]}"
+          MANIFEST_OUTPUT=$(docker buildx imagetools inspect "$FINAL_IMAGE" --raw)
+          verify_index "$MANIFEST_OUTPUT"
           {
-            echo "### 🐳 Docker Images"
-            echo "- \`$IMAGE_NAME:$VERSION\`"
+            echo "### Docker image"
+            echo "- $FINAL_IMAGE (linux/amd64, linux/arm64)"
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Clean up
-        if: always()
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          [ -z "$IMAGE_NAME" ] && exit 0
-          docker rmi "$IMAGE_NAME:$VERSION" || true
-          docker builder prune -af || true

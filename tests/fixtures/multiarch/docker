@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$MOCK_LOG"
+case "$*" in
+  'login '*) cat >/dev/null ;;
+  'manifest inspect --verbose '*)
+    arch=${4##*-}
+    if [ "${MISSING_ARCH:-}" = "$arch" ]; then echo 'manifest unknown' >&2; exit 1; fi
+    printf '{"Descriptor":{"digest":"sha256:%s"}}\n' "$arch"
+    ;;
+  'manifest inspect '*)
+    if [ "${API_ERROR:-false}" = true ]; then echo 'unauthorized' >&2; exit 1; fi
+    if [[ "$3" == *:build-* ]]; then
+      [ "${STAGE_EXISTS:-false}" = true ] || { echo 'manifest unknown' >&2; exit 1; }
+    else
+      [ "${FINAL_EXISTS:-false}" = true ] || { echo 'manifest unknown' >&2; exit 1; }
+    fi
+    echo '{}'
+    ;;
+  'buildx imagetools inspect '*' --raw')
+    if [ "${API_ERROR:-false}" = true ]; then echo 'unauthorized' >&2; exit 1; fi
+    if [ "${FINAL_EXISTS:-false}" != true ] && [ ! -f "$MOCK_CREATED" ]; then
+      echo 'manifest unknown' >&2; exit 1
+    fi
+    if [ "${SINGLE_ARCH:-false}" = true ]; then echo '{"config":{}}'; exit 0; fi
+    printf '{"manifests":[{"digest":"sha256:amd64","platform":{"os":"linux","architecture":"amd64"}},{"digest":"sha256:arm64","platform":{"os":"linux","architecture":"%s"}}]}\n' "${INDEX_ARCH:-arm64}"
+    ;;
+  'buildx imagetools inspect '*)
+    ref=$4; arch=${ref##*:}; arch=${arch##*-}
+    jq -n --arg arch "$arch" --arg sha "${REMOTE_SHA:-$SOURCE_SHA}" '{os:"linux",architecture:$arch,config:{Labels:{"org.opencontainers.image.revision":$sha}}}'
+    ;;
+  'buildx imagetools create '*) touch "$MOCK_CREATED" ;;
+  'image inspect '*)
+    jq -n --arg arch "${LOCAL_ARCH:-$ARCH}" --arg sha "$SOURCE_SHA" '[{Os:"linux",Architecture:$arch,Config:{Labels:{"org.opencontainers.image.revision":$sha}}}]'
+    ;;
+  'run --rm --entrypoint /cnb/lifecycle/launcher '*) ;;
+  'push '*) ;;
+  *) echo "Unexpected docker call: $*" >&2; exit 2 ;;
+esac
