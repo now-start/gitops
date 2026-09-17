@@ -36,7 +36,7 @@ x-service-defaults: &service-defaults
 services:
   config:
     <<: *service-defaults
-    image: ghcr.io/now-start/config:2.1.15
+    image: ghcr.io/now-start/config:2.1.16
     deploy:
       <<: *global-deploy-defaults
     environment:
