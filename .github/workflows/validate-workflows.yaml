@@ -1,0 +1,38 @@
+name: Validate Workflows
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - "tests/**"
+      - "examples/**"
+      - "renovate.json"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - "tests/**"
+      - "examples/**"
+      - "renovate.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Install validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bats ruby jq
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Validate workflows and release contracts
+        run: bash tests/run_tests.sh

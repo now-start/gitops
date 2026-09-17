@@ -1,0 +1,80 @@
+name: Reusable Release
+
+on:
+  workflow_call:
+    inputs:
+      tag-name:
+        description: Exact Git tag, including the module prefix when applicable
+        required: true
+        type: string
+      prerelease:
+        description: Whether to publish a GitHub prerelease
+        type: string
+        default: 'false'
+      source-sha:
+        description: Commit that the Git tag must reference
+        required: true
+        type: string
+    secrets:
+      github-token:
+        description: GitHub token for viewing and creating releases
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Create version tag and release
+        env:
+          GH_TOKEN: ${{ secrets.github-token }}
+          TAG_NAME: ${{ inputs.tag-name }}
+          PRERELEASE: ${{ inputs.prerelease }}
+          SOURCE_SHA: ${{ inputs.source-sha }}
+        run: |
+          case "$PRERELEASE" in
+            true|false) ;;
+            *) echo 'Invalid prerelease flag' >&2; exit 1 ;;
+          esac
+          TAGS=$(git ls-remote --tags origin "refs/tags/$TAG_NAME" "refs/tags/$TAG_NAME^{}")
+          TAG_SHA=$(awk 'NR == 1 { sha = $1 } /\^\{\}$/ { sha = $1 } END { print sha }' <<< "$TAGS")
+          if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$SOURCE_SHA" ]; then
+            echo 'Git tag revision changed' >&2
+            exit 1
+          fi
+
+          RELEASE_FILE="$RUNNER_TEMP/release-state.json"
+          HTTP_STATUS=$(curl --fail-with-body --silent --show-error --output "$RELEASE_FILE" \
+            --write-out '%{http_code}' \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$TAG_NAME") || {
+              [ "$HTTP_STATUS" = '404' ] || exit 1
+            }
+          case "$HTTP_STATUS" in
+            200)
+              [ -n "$TAG_SHA" ] || { echo 'Release has no matching Git tag' >&2; exit 1; }
+              jq -e --argjson prerelease "$PRERELEASE" \
+                '.draft == false and .prerelease == $prerelease' "$RELEASE_FILE" >/dev/null
+              echo "Release $TAG_NAME already exists"
+              exit 0
+              ;;
+            404) ;;
+            *) echo "Cannot read release state: HTTP $HTTP_STATUS" >&2; exit 1 ;;
+          esac
+
+          if [ -z "$TAG_SHA" ]; then
+            git tag "$TAG_NAME" "$SOURCE_SHA"
+            git push origin "refs/tags/$TAG_NAME"
+          fi
+          RELEASE_ARGS=(--verify-tag --title "$TAG_NAME" --generate-notes)
+          if [ "$PRERELEASE" = 'true' ]; then
+            RELEASE_ARGS+=(--prerelease --latest=false)
+          fi
+          gh release create "$TAG_NAME" "${RELEASE_ARGS[@]}"

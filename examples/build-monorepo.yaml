@@ -1,0 +1,52 @@
+# 모노레포 (Monorepo) 예시
+# 하나의 레포에 여러 Gradle 서브모듈이 존재하는 경우
+# 각 모듈의 Gradle version/tag 기준으로 릴리스 여부를 판단
+# 기존 버전 이미지는 revision 확인 후 재사용
+# 레포의 .github/workflows/build.yaml 파일로 저장하여 사용
+#
+# 태그 형식: {module}-{version}  예) config-2.1.5, gateway-4.8.0
+# Docker 이미지: ghcr.io/now-start/{module}:{version}  예) ghcr.io/now-start/config:2.1.5
+#
+# 운영 배포 버전은 GitOps 저장소의 Compose에서 관리합니다.
+
+name: Platform CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  config:
+    uses: now-start/gitops/.github/workflows/reusable-java-app.yaml@main
+    with:
+      module: config          # Gradle 서브모듈 이름 (:config:build, :config:bootBuildImage 등)
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+  eureka:
+    uses: now-start/gitops/.github/workflows/reusable-java-app.yaml@main
+    with:
+      module: eureka
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+  admin:
+    uses: now-start/gitops/.github/workflows/reusable-java-app.yaml@main
+    with:
+      module: admin
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+  gateway:
+    uses: now-start/gitops/.github/workflows/reusable-java-app.yaml@main
+    with:
+      module: gateway
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}

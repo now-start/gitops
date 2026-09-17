@@ -1,0 +1,116 @@
+name: Reusable Java Prepare
+
+on:
+  workflow_call:
+    inputs:
+      module:
+        description: Gradle submodule name, empty for a single-module project
+        type: string
+        default: ''
+    outputs:
+      version:
+        description: Validated project SemVer
+        value: ${{ jobs.policy.outputs.version }}
+      tag-name:
+        description: Git tag including optional module prefix
+        value: ${{ jobs.policy.outputs.tag-name }}
+      prerelease:
+        description: Whether this is an alpha, beta, or RC release
+        value: ${{ jobs.policy.outputs.prerelease }}
+      source-sha:
+        description: Commit associated with the version
+        value: ${{ jobs.policy.outputs.source-sha }}
+      tag-exists:
+        description: Whether the version Git tag exists
+        value: ${{ jobs.policy.outputs.tag-exists }}
+      release-exists:
+        description: Whether a matching published release exists
+        value: ${{ jobs.policy.outputs.release-exists }}
+      java-version:
+        description: Detected Java version
+        value: ${{ jobs.metadata.outputs.java-version }}
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      java-version: ${{ steps.java-info.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Validate module name
+        if: ${{ inputs.module != '' }}
+        env:
+          MODULE: ${{ inputs.module }}
+        run: |
+          if [[ ! "$MODULE" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+            echo "❌ Error: Invalid module name '$MODULE'. Only alphanumeric, dash, underscore, and dot are allowed."
+            exit 1
+          fi
+
+      - name: Detect Java version
+        id: java-info
+        env:
+          MODULE: ${{ inputs.module }}
+        run: |
+          BUILD_FILES=()
+          if [ -n "$MODULE" ]; then
+            BUILD_FILES+=("$MODULE/build.gradle" "$MODULE/build.gradle.kts")
+          fi
+          BUILD_FILES+=("build.gradle" "build.gradle.kts")
+
+          for BUILD_FILE in "${BUILD_FILES[@]}"; do
+            [ -f "$BUILD_FILE" ] || continue
+
+            VERSION=$(grep -Eo "JavaLanguageVersion.of\([0-9]+\)" "$BUILD_FILE" | head -1 | sed -E 's/[^0-9]//g')
+            VERSION=${VERSION:-$(grep -Eo "(source|target)Compatibility[[:space:]]*=[[:space:]]*['\"]?[0-9]+['\"]?" "$BUILD_FILE" | head -1 | sed -E 's/[^0-9]//g')}
+            VERSION=${VERSION:-$(grep -Eo "JavaVersion\.VERSION_[0-9]+" "$BUILD_FILE" | head -1 | sed -E 's/[^0-9]//g')}
+
+            if [ -n "$VERSION" ]; then
+              break
+            fi
+          done
+
+          if [ -z "$VERSION" ]; then
+            echo "❌ Error: Could not extract Java version from Gradle build files: ${BUILD_FILES[*]}"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "✅ Detected Java version: $VERSION ($BUILD_FILE)"
+
+      - name: Set up JDK ${{ steps.java-info.outputs.version }}
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          java-version: ${{ steps.java-info.outputs.version }}
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Extract version from build.gradle
+        id: version
+        env:
+          MODULE: ${{ inputs.module }}
+        run: |
+          chmod +x gradlew
+
+          GRADLE_TASK="${MODULE:+:$MODULE:}properties"
+          VERSION=$(./gradlew "$GRADLE_TASK" -q --no-daemon | grep "^version:" | awk '{print $2}')
+
+          if [ -z "$VERSION" ] || [ "$VERSION" = "unspecified" ]; then
+            echo "❌ Error: Could not extract version from Gradle properties"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  policy:
+    needs: metadata
+    uses: ./.github/workflows/reusable-release-prepare.yaml
+    with:
+      version: ${{ needs.metadata.outputs.version }}
+      tag-prefix: ${{ inputs.module }}

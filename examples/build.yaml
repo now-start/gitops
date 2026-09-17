@@ -1,0 +1,28 @@
+# 단일 레포 (Single Repo) 예시
+# 서비스 하나가 독립 레포로 존재하는 경우
+# 레포의 .github/workflows/build.yaml 파일로 저장하여 사용
+
+name: App CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  app:
+    uses: now-start/gitops/.github/workflows/reusable-java-app.yaml@main
+    # with:
+    #   registry-org: ghcr.io/now-start  # 생략 시 기본값 사용
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
