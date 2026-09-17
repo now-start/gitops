@@ -16,9 +16,6 @@ x-deploy-defaults: &deploy-defaults
 x-global-deploy-defaults: &global-deploy-defaults
   <<: *deploy-defaults
   mode: global
-  placement:
-    constraints:
-      - node.platform.arch == x86_64
 
 x-service-defaults: &service-defaults
   user: root
@@ -46,7 +43,7 @@ services:
 
   eureka:
     <<: *service-defaults
-    image: ghcr.io/now-start/eureka:2.4.10
+    image: ghcr.io/now-start/eureka:2.4.11
 
   admin:
     <<: *service-defaults
@@ -54,7 +51,7 @@ services:
 
   gateway:
     <<: *service-defaults
-    image: ghcr.io/now-start/gateway:6.1.1
+    image: ghcr.io/now-start/gateway:6.1.2
     deploy:
       <<: *global-deploy-defaults
     ports:

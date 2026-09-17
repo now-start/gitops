@@ -1,6 +1,6 @@
 services:
   nyang-nyang-bot:
-    image: ghcr.io/now-start/nyang-nyang-bot:5.9.8
+    image: ghcr.io/now-start/nyang-nyang-bot:5.9.9
     user: root
     environment:
       TZ: Asia/Seoul
