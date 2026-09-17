@@ -10,10 +10,6 @@
   "platformAutomerge": false,
   "packageRules": [
     {
-      "matchManagers": ["docker-compose"],
-      "groupName": null
-    },
-    {
       "matchManagers": ["docker-compose", "github-actions"],
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
