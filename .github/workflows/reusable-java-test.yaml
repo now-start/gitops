@@ -94,7 +94,7 @@ jobs:
         run: |
           GRADLE_TASK="${MODULE:+:$MODULE:}build"
           ./gradlew "$GRADLE_TASK" --build-cache --parallel -Dorg.gradle.jvmargs="-Xmx2g"
-          
+
       - name: Summary
         if: always()
         run: |
