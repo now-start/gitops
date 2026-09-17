@@ -20,7 +20,7 @@ case "$*" in
   'buildx imagetools inspect '*' --raw')
     if [ "${API_ERROR:-false}" = true ]; then echo 'unauthorized' >&2; exit 1; fi
     if [ "${FINAL_EXISTS:-false}" != true ] && [ ! -f "$MOCK_CREATED" ]; then
-      echo 'manifest unknown' >&2; exit 1
+      echo "ERROR: $4: not found" >&2; exit 1
     fi
     if [ "${SINGLE_ARCH:-false}" = true ]; then echo '{"config":{}}'; exit 0; fi
     printf '{"manifests":[{"digest":"sha256:amd64","platform":{"os":"linux","architecture":"amd64"}},{"digest":"sha256:arm64","platform":{"os":"linux","architecture":"%s"}}]}\n' "${INDEX_ARCH:-arm64}"
@@ -33,7 +33,12 @@ case "$*" in
   'image inspect '*)
     jq -n --arg arch "${LOCAL_ARCH:-$ARCH}" --arg sha "$SOURCE_SHA" '[{Os:"linux",Architecture:$arch,Config:{Labels:{"org.opencontainers.image.revision":$sha}}}]'
     ;;
-  'run --rm --entrypoint /cnb/lifecycle/launcher '*) ;;
+  'run --rm --entrypoint /cnb/lifecycle/launcher '*)
+    if [[ "$*" != *' -- java -version' ]]; then
+      echo 'failed to launch: bash exec: no such file or directory' >&2
+      exit 82
+    fi
+    ;;
   'push '*) ;;
   *) echo "Unexpected docker call: $*" >&2; exit 2 ;;
 esac
