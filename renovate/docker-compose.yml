@@ -1,6 +1,6 @@
 services:
   renovate:
-    image: renovate/renovate:44.101.0
+    image: renovate/renovate:44.101.2
     # entrypoint 는 그대로 둔다. renovate-entrypoint.sh 는 첫 인자가 실행 가능하면
     # renovate 를 덧붙이지 않고 containerbase 셋업을 거쳐 그대로 넘긴다.
     # 루프가 renovate 종료를 기다린 뒤 sleep 하므로 실행이 겹칠 수 없다(flock 불필요).
