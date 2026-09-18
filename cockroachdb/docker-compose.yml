@@ -6,10 +6,12 @@ services:
       - |
         cockroach start --insecure \
           --store=/data \
-          --listen-addr=0.0.0.0:26257 \
+          --listen-addr=0.0.0.0:26357 \
+          --sql-addr=0.0.0.0:26257 \
           --http-addr=0.0.0.0:8080 \
-          --advertise-addr="$$(hostname -i):26257" \
-          --join=tasks.cockroachdb:26257 &
+          --advertise-addr="$$(hostname -i):26357" \
+          --advertise-sql-addr="$$(hostname -i):26257" \
+          --join=tasks.cockroachdb:26257,tasks.cockroachdb:26357 &
         cockroach_pid=$$!
         trap 'kill -TERM "$$cockroach_pid"; wait "$$cockroach_pid"' INT TERM
 
@@ -35,12 +37,6 @@ services:
       TZ: Asia/Seoul
     volumes:
       - cockroachdb_data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "cockroach sql --insecure -e 'select 1' || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 90s
     deploy:
       mode: global
       endpoint_mode: dnsrr
