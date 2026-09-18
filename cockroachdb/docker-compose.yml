@@ -1,0 +1,69 @@
+services:
+  cockroachdb:
+    image: cockroachdb/cockroach:v24.3.36
+    command: >
+      start
+      --insecure
+      --store=/data
+      --listen-addr=0.0.0.0:26257
+      --http-addr=0.0.0.0:8080
+      --advertise-addr=cockroachdb:26257
+      --join=cockroachdb:26257
+    ports:
+      - target: 26257
+        published: 26257
+        protocol: tcp
+        mode: ingress
+      - target: 8080
+        published: 8080
+        protocol: tcp
+        mode: ingress
+    environment:
+      TZ: Asia/Seoul
+    volumes:
+      - cockroachdb_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "cockroach sql --insecure -e 'select 1' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    deploy:
+      mode: global
+      endpoint_mode: dnsrr
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+        monitor: 3m
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: pause
+        monitor: 3m
+      restart_policy:
+        condition: any
+        delay: 5s
+
+  cockroach-init:
+    image: cockroachdb/cockroach:v24.3.36
+    command: >
+      init --insecure --host=cockroachdb:26257
+    depends_on:
+      - cockroachdb
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: none
+      update_config:
+        failure_action: continue
+
+networks:
+  default:
+    driver: overlay
+    driver_opts:
+      com.docker.network.driver.mtu: "1200"
+
+volumes:
+  cockroachdb_data:
+    driver: local

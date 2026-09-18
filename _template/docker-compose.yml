@@ -2,6 +2,7 @@ services:
   app:
     image: REPLACE_IMAGE:0.0.0
     environment:
+      TZ: Asia/Seoul
       APP_SECRET: ${APP_SECRET:-}
     volumes:
       - app_data:/data
