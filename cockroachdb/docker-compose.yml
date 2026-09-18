@@ -13,11 +13,11 @@ services:
       - target: 26257
         published: 26257
         protocol: tcp
-        mode: ingress
+        mode: host
       - target: 8080
         published: 8080
         protocol: tcp
-        mode: ingress
+        mode: host
     environment:
       TZ: Asia/Seoul
     volumes:
