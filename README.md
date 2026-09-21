@@ -29,6 +29,7 @@ compatibility; new callers should use this repository.
 | `grafana` | `grafana/docker-compose.yml` | Grafana LGTM observability | NFS |
 | `platform` | `platform/docker-compose.yml` | Config, Eureka, Admin, Gateway | `grafana_default` |
 | `chzzk` | `chzzk/docker-compose.yml` | nyang-nyang-bot | `platform_default`, `grafana_default`, NFS |
+| `cockroachdb` | `cockroachdb/docker-compose.yml` | Distributed SQL cluster | none (local disk per node, not NFS) |
 | `evergreen` | `evergreen/docker-compose.yml` | Lotto and coin services | `platform_default`, `grafana_default` |
 | `bitwarden` | `bitwarden/docker-compose.yml` | Vaultwarden | NFS |
 | `flame` | `flame/docker-compose.yml` | Flame dashboard | NFS |
@@ -79,8 +80,8 @@ at image build time before enabling their Actuator liveness probes in Swarm.
 
 ## Portainer GitOps
 
-1. Create Git-backed stacks for `grafana`, `platform`, `chzzk`, `evergreen`,
-   `bitwarden`, `flame`, and `redis`. Keep the `portainer` stack manually
+1. Create Git-backed stacks for `grafana`, `platform`, `chzzk`, `cockroachdb`,
+   `evergreen`, `bitwarden`, `flame`, and `redis`. Keep the `portainer` stack manually
    managed so a failed self-update cannot disable its own control plane.
 2. Use branch `main`, the directory name as the stack name, and the listed
    Compose path.
@@ -90,6 +91,44 @@ at image build time before enabling their Actuator liveness probes in Swarm.
 5. Enable GitOps automatic updates with five-minute polling. Keep **Re-pull
    image and redeploy** and **Force redeployment** disabled because application
    deployments use a changed immutable image tag.
+
+### CockroachDB cluster
+
+The `cockroachdb` service uses `mode: global`, so Swarm runs one storage node on
+every eligible Swarm node. Under `endpoint_mode: dnsrr`, `--join` uses the
+service's own Swarm DNS name resolved from `{{.Service.Name}}`, with the
+`tasks.` name as a second join entry, so the stack name is not baked in; adding a Swarm node
+therefore adds a CockroachDB node without a repository change, while removing one
+lets CockroachDB re-replicate its ranges automatically. Neither direction needs
+operator action for the cluster to stay available, assuming at least three nodes
+for the default replication factor of three.
+
+The single-replica `init` service is a one-shot task that bootstraps the cluster
+once and then stays in the `Complete` state, which Portainer displays as `0/1`;
+that is expected and not a failure. It is idempotent: whenever Swarm recreates it
+(a changed service spec, a forced redeploy, or a recreated stack), it detects the
+already-initialized cluster and exits successfully without touching data.
+`cockroachdb_data` is a node-local volume, deliberately not NFS. A returning node
+uses its persisted store and rejoins with its original node ID.
+
+A permanently removed Swarm node remains listed as dead until it is decommissioned.
+`cockroach node` subcommands connect over the SQL port, not the inter-node RPC port,
+so they run against any surviving node's published 26257. Only decommission a node
+after confirming that it is gone for good:
+
+```sh
+cockroach node status --insecure --host=<surviving-node>:26257
+cockroach node decommission <dead-node-id> --insecure --host=<surviving-node>:26257
+```
+
+`cockroach init` is the exception: it uses the RPC port 26357, which is why the
+`init` service targets that port and is not reachable from outside the overlay.
+
+Every Swarm node publishes SQL 26257 and the DB Console 8080 on itself in host
+mode, so there is no routing-mesh single endpoint; clients reach any node directly.
+The cluster is insecure, so expose these ports only on the trusted network. The
+healthcheck remains unhealthy until `init` completes; its `start_period` is therefore
+300 seconds.
 
 ### Compose path migration
 

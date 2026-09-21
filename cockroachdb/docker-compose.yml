@@ -4,39 +4,68 @@ services:
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
-        cockroach start --insecure \
-          --store=/data \
-          --listen-addr=0.0.0.0:26357 \
-          --sql-addr=0.0.0.0:26257 \
-          --http-addr=0.0.0.0:8080 \
-          --advertise-addr="$$(hostname -i):26357" \
-          --advertise-sql-addr="$$(hostname -i):26257" \
-          --join=tasks.cockroachdb:26257,tasks.cockroachdb:26357 &
-        cockroach_pid=$$!
-        trap 'kill -TERM "$$cockroach_pid"; wait "$$cockroach_pid"' INT TERM
+        SERVICE_DNS=$$SERVICE_NAME
+        TASKS_DNS=tasks.$$SERVICE_NAME
+        RPC_PORT=26357
+        SQL_PORT=26257
+        HTTP_PORT=8080
+        advertise_ip=
+        attempt=1
 
-        while ! cockroach node status --insecure --host=127.0.0.1:26257 >/dev/null 2>&1; do
-          if ! kill -0 "$$cockroach_pid" 2>/dev/null; then
-            wait "$$cockroach_pid" || exit $$?
-            exit 1
-          fi
-          cockroach init --insecure --host=127.0.0.1:26257 >/dev/null 2>&1 || true
+        while [ "$$attempt" -le 30 ]; do
+          addresses=$$(hostname -i)
+          dns_addresses=$$({ getent ahostsv4 "$$SERVICE_DNS" || true; getent ahostsv4 "$$TASKS_DNS" || true; } | awk '{print $$1}' | sort -u)
+          for address in $$addresses; do
+            for dns_address in $$dns_addresses; do
+              if [ "$$address" = "$$dns_address" ]; then
+                advertise_ip=$$address
+                break 2
+              fi
+            done
+          done
+          [ -n "$$advertise_ip" ] && break
+          attempt=$$((attempt + 1))
           sleep 1
         done
-        wait "$$cockroach_pid"
+
+        if [ -z "$$advertise_ip" ]; then
+          set -- $$(hostname -i)
+          advertise_ip=$$1
+        fi
+
+        exec cockroach start --insecure \
+          --store=/data \
+          --listen-addr=0.0.0.0:$$RPC_PORT \
+          --advertise-addr=$$advertise_ip:$$RPC_PORT \
+          --sql-addr=0.0.0.0:$$SQL_PORT \
+          --advertise-sql-addr=$$advertise_ip:$$SQL_PORT \
+          --http-addr=0.0.0.0:$$HTTP_PORT \
+          --join=$$SERVICE_DNS:$$RPC_PORT,$$TASKS_DNS:$$RPC_PORT \
+          --locality=swarm_node=$$NODE_HOSTNAME \
+          --cache=.25 \
+          --max-sql-memory=.25
+    environment:
+      TZ: Asia/Seoul
+      NODE_HOSTNAME: "{{.Node.Hostname}}"
+      SERVICE_NAME: "{{.Service.Name}}"
     ports:
       - target: 26257
-        published: 26257
+        published: ${COCKROACHDB_SQL_PORT:-26257}
         protocol: tcp
         mode: host
       - target: 8080
-        published: 8080
+        published: ${COCKROACHDB_HTTP_PORT:-8080}
         protocol: tcp
         mode: host
-    environment:
-      TZ: Asia/Seoul
     volumes:
       - cockroachdb_data:/data
+    stop_grace_period: 120s
+    healthcheck:
+      test: ["CMD", "cockroach", "sql", "--insecure", "--host=127.0.0.1:26257", "-e", "SELECT 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
     deploy:
       mode: global
       endpoint_mode: dnsrr
@@ -53,6 +82,39 @@ services:
       restart_policy:
         condition: any
         delay: 5s
+
+  init:
+    image: cockroachdb/cockroach:v24.3.36
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        SERVICE_DNS=$${SERVICE_NAME%_*}_cockroachdb
+        TASKS_DNS=tasks.$${SERVICE_NAME%_*}_cockroachdb
+        attempt=1
+        while [ "$$attempt" -le 60 ]; do
+          for crdb_dns in "$$SERVICE_DNS" "$$TASKS_DNS"; do
+            if output=$$(timeout 30 cockroach init --insecure --host=$$crdb_dns:26357 2>&1); then
+              echo "$$output"
+              exit 0
+            fi
+            echo "$$output"
+            case "$$output" in
+              *"already been initialized"*) exit 0 ;;
+            esac
+          done
+          attempt=$$((attempt + 1))
+          sleep 5
+        done
+        echo "CockroachDB cluster initialization failed after 60 attempts" >&2
+        exit 1
+    environment:
+      TZ: Asia/Seoul
+      SERVICE_NAME: "{{.Service.Name}}"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
 
 networks:
   default:
