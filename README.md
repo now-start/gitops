@@ -157,6 +157,15 @@ The `portainer` Compose file remains the reviewed desired state for manual
 updates. Renovate may propose its version changes, but those changes are not
 automatically deployed.
 
+The agent is split by Swarm role: `agent` runs on managers and `agent-worker`
+runs on workers. `agent` is the Portainer entry point, so the managers alone
+decide the negotiated Docker API version and every node must support that
+version. Managers are currently capped at API 1.43, which newer worker engines
+still accept, so a worker may run a newer engine without breaking the
+environment. Both agent services must always use the same image tag. Collapse
+them back into one `agent` service once every node supports the same Docker
+API version.
+
 When applying the initial conversion from mutable tags (`latest` or `lts`) to
 explicit versions, pause automatic updates for the affected Portainer stacks.
 Changing the image string replaces Swarm tasks even when both tags currently
