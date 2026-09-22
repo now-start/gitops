@@ -94,14 +94,14 @@ at image build time before enabling their Actuator liveness probes in Swarm.
 
 ### CockroachDB cluster
 
-The `cockroachdb` service uses `mode: global`, so Swarm runs one storage node on
-every eligible Swarm node. Under `endpoint_mode: dnsrr`, `--join` uses the
-service's own Swarm DNS name resolved from `{{.Service.Name}}`, with the
-`tasks.` name as a second join entry, so the stack name is not baked in; adding a Swarm node
-therefore adds a CockroachDB node without a repository change, while removing one
-lets CockroachDB re-replicate its ranges automatically. Neither direction needs
-operator action for the cluster to stay available, assuming at least three nodes
-for the default replication factor of three.
+The `cockroachdb` service uses `mode: global`, so Swarm runs one storage node
+on every eligible Swarm node. Under `endpoint_mode: dnsrr`, `--join` uses the
+short service DNS names `cockroachdb` and `tasks.cockroachdb`, because the
+stack-prefixed service name does not resolve inside the stack network; adding
+a Swarm node therefore adds a CockroachDB node without a repository change,
+while removing one lets CockroachDB re-replicate its ranges automatically.
+Neither direction needs operator action for the cluster to stay available,
+assuming at least three nodes for the default replication factor of three.
 
 The single-replica `init` service is a one-shot task that bootstraps the cluster
 once and then stays in the `Complete` state, which Portainer displays as `0/1`;

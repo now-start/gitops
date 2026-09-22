@@ -4,8 +4,9 @@ services:
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
-        SERVICE_DNS=$$SERVICE_NAME
-        TASKS_DNS=tasks.$$SERVICE_NAME
+        # Short name: the stack-prefixed service name does not resolve here.
+        SERVICE_DNS=cockroachdb
+        TASKS_DNS=tasks.cockroachdb
         RPC_PORT=26357
         SQL_PORT=26257
         HTTP_PORT=8080
@@ -47,7 +48,6 @@ services:
     environment:
       TZ: Asia/Seoul
       NODE_HOSTNAME: "{{.Node.Hostname}}"
-      SERVICE_NAME: "{{.Service.Name}}"
     ports:
       - target: 26257
         published: ${COCKROACHDB_SQL_PORT:-26257}
@@ -88,8 +88,9 @@ services:
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
-        SERVICE_DNS=$${SERVICE_NAME%_*}_cockroachdb
-        TASKS_DNS=tasks.$${SERVICE_NAME%_*}_cockroachdb
+        # Short name: the stack-prefixed service name does not resolve here.
+        SERVICE_DNS=cockroachdb
+        TASKS_DNS=tasks.cockroachdb
         attempt=1
         while [ "$$attempt" -le 60 ]; do
           for crdb_dns in "$$SERVICE_DNS" "$$TASKS_DNS"; do
@@ -109,7 +110,6 @@ services:
         exit 1
     environment:
       TZ: Asia/Seoul
-      SERVICE_NAME: "{{.Service.Name}}"
     deploy:
       replicas: 1
       restart_policy:
