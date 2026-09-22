@@ -117,7 +117,7 @@ services:
         delay: 10s
 
   decommissioner:
-    image: docker:29.4.0-cli
+    image: docker:29.8.1-cli
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
