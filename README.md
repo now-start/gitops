@@ -138,8 +138,9 @@ automatically wiping a database store is not an acceptable default.
 Every Swarm node publishes SQL 26257 and the DB Console 8080 on itself in host
 mode, so there is no routing-mesh single endpoint; clients reach any node directly.
 The cluster is insecure, so expose these ports only on the trusted network. The
-healthcheck remains unhealthy until `init` completes; its `start_period` is therefore
-300 seconds.
+service intentionally has no healthcheck: Swarm withholds a task from service DNS
+until it passes, while CockroachDB readiness requires an initialized cluster, which
+would deadlock bootstrap.
 
 ### Compose path migration
 

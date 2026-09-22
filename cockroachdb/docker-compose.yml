@@ -60,12 +60,8 @@ services:
     volumes:
       - cockroachdb_data:/data
     stop_grace_period: 120s
-    healthcheck:
-      test: ["CMD", "cockroach", "sql", "--insecure", "--host=127.0.0.1:26257", "-e", "SELECT 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 300s
+    # Intentionally no healthcheck: readiness probes deadlock Swarm service
+    # discovery before cluster initialization.
     deploy:
       mode: global
       endpoint_mode: dnsrr
