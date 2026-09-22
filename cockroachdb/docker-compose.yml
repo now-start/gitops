@@ -116,6 +116,152 @@ services:
         condition: on-failure
         delay: 10s
 
+  decommissioner:
+    image: docker:29.4.0-cli
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        CRDB_SERVICE=$${SERVICE_NAME%_*}_cockroachdb
+        STRIKE_DIR=/tmp/strikes
+        mkdir -p "$$STRIKE_DIR"
+
+        case "$$CHECK_INTERVAL" in
+          ''|*[!0-9]*) CHECK_INTERVAL=300 ;;
+        esac
+        case "$$GRACE_CHECKS" in
+          ''|*[!0-9]*) GRACE_CHECKS=12 ;;
+        esac
+        case "$$MIN_LIVE_NODES" in
+          ''|*[!0-9]*) MIN_LIVE_NODES=3 ;;
+        esac
+
+        while true; do
+          if [ "$$AUTO_DECOMMISSION" != true ]; then
+            echo "automatic CockroachDB decommissioning is disabled"
+            sleep "$$CHECK_INTERVAL" || true
+            continue
+          fi
+
+          echo "using CockroachDB service $$CRDB_SERVICE"
+          container=$$(docker ps -q --filter "label=com.docker.swarm.service.name=$$CRDB_SERVICE" | head -n 1 || true)
+          if [ -z "$$container" ]; then
+            echo "no local CockroachDB task container found for $$CRDB_SERVICE"
+            sleep "$$CHECK_INTERVAL" || true
+            continue
+          fi
+          echo "found local CockroachDB task container $$container"
+
+          if ! status=$$(docker exec "$$container" cockroach node status --decommission --format=tsv --insecure --host=127.0.0.1:26257); then
+            echo "CockroachDB node status failed; will retry"
+            sleep "$$CHECK_INTERVAL" || true
+            continue
+          fi
+          echo "CockroachDB node status --decommission --format=tsv succeeded"
+
+          if ! swarm_nodes=$$(docker node ls --format '{{.Hostname}} {{.Status}}'); then
+            echo "Swarm node readiness lookup failed; will retry"
+            sleep "$$CHECK_INTERVAL" || true
+            continue
+          fi
+          ready_nodes=$$(printf '%s\n' "$$swarm_nodes" | awk '$$2 == "Ready" { print $$1 }' || true)
+
+          if ! rows=$$(printf '%s\n' "$$status" | awk -F '\t' -v ready="$$ready_nodes" '
+            NR == 1 {
+              for (i = 1; i <= NF; i++) column[$$i] = i
+              if (!("id" in column) || !("locality" in column) || !("is_live" in column) || !("membership" in column)) exit 2
+              next
+            }
+            {
+              id = $$(column["id"])
+              locality = $$(column["locality"])
+              live = $$(column["is_live"])
+              membership = $$(column["membership"])
+              host = ""
+              n = split(locality, parts, ",")
+              for (i = 1; i <= n; i++) {
+                if (parts[i] ~ /^swarm_node=/) {
+                  host = substr(parts[i], length("swarm_node=") + 1)
+                  break
+                }
+              }
+              candidate = live != "true" && membership == "active" && host != "" && index("\n" ready "\n", "\n" host "\n") == 0
+              print id "\t" candidate "\t" live
+            }
+          '); then
+            echo "CockroachDB node status header was unparseable; will retry"
+            sleep "$$CHECK_INTERVAL" || true
+            continue
+          fi
+
+          live_nodes=0
+          candidates=
+          while IFS='	' read -r id candidate live; do
+            case "$$id" in
+              ''|*[!0-9]*) echo "skipping invalid CockroachDB node id $$id"; continue ;;
+            esac
+            if [ "$$live" = true ]; then
+              live_nodes=$$((live_nodes + 1))
+            fi
+            strike_file="$$STRIKE_DIR/$$id"
+            if [ "$$candidate" != 1 ]; then
+              rm -f "$$strike_file" || true
+              continue
+            fi
+            strikes=0
+            if [ -f "$$strike_file" ]; then
+              strikes=$$(cat "$$strike_file" 2>/dev/null || true)
+            fi
+            case "$$strikes" in
+              ''|*[!0-9]*) strikes=0 ;;
+            esac
+            strikes=$$((strikes + 1))
+            if ! printf '%s\n' "$$strikes" > "$$strike_file"; then
+              echo "could not persist strike count for CockroachDB node $$id"
+              continue
+            fi
+            candidates="$$candidates $$id"
+          done <<EOF
+        $$rows
+        EOF
+
+          for id in $$candidates; do
+            strikes=$$(cat "$$STRIKE_DIR/$$id" 2>/dev/null || true)
+            case "$$strikes" in
+              ''|*[!0-9]*) continue ;;
+            esac
+            if [ "$$strikes" -ge "$$GRACE_CHECKS" ] && [ "$$live_nodes" -ge "$$MIN_LIVE_NODES" ]; then
+              echo "decommissioning CockroachDB node $$id after $$strikes/$$GRACE_CHECKS strikes with $$live_nodes live nodes"
+              if docker exec "$$container" cockroach node decommission "$$id" --wait=none --insecure --host=127.0.0.1:26257; then
+                echo "decommission request for CockroachDB node $$id completed"
+              else
+                echo "decommission request for CockroachDB node $$id failed"
+              fi
+              rm -f "$$STRIKE_DIR/$$id" || true
+            else
+              echo "declining CockroachDB node $$id: strikes=$$strikes threshold=$$GRACE_CHECKS live_nodes=$$live_nodes"
+            fi
+          done
+
+          sleep "$$CHECK_INTERVAL" || true
+        done
+    environment:
+      TZ: Asia/Seoul
+      SERVICE_NAME: "{{.Service.Name}}"
+      AUTO_DECOMMISSION: ${COCKROACHDB_AUTO_DECOMMISSION:-true}
+      CHECK_INTERVAL: ${COCKROACHDB_DECOMMISSION_INTERVAL:-300}
+      GRACE_CHECKS: ${COCKROACHDB_DECOMMISSION_GRACE_CHECKS:-12}
+      MIN_LIVE_NODES: ${COCKROACHDB_DECOMMISSION_MIN_LIVE_NODES:-3}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: any
+        delay: 30s
+
 networks:
   default:
     driver: overlay

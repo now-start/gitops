@@ -29,7 +29,7 @@ compatibility; new callers should use this repository.
 | `grafana` | `grafana/docker-compose.yml` | Grafana LGTM observability | NFS |
 | `platform` | `platform/docker-compose.yml` | Config, Eureka, Admin, Gateway | `grafana_default` |
 | `chzzk` | `chzzk/docker-compose.yml` | nyang-nyang-bot | `platform_default`, `grafana_default`, NFS |
-| `cockroachdb` | `cockroachdb/docker-compose.yml` | Distributed SQL cluster | none (local disk per node, not NFS) |
+| `cockroachdb` | `cockroachdb/docker-compose.yml` | Distributed SQL cluster | local disk per node (not NFS), manager Docker socket |
 | `evergreen` | `evergreen/docker-compose.yml` | Lotto and coin services | `platform_default`, `grafana_default` |
 | `bitwarden` | `bitwarden/docker-compose.yml` | Vaultwarden | NFS |
 | `flame` | `flame/docker-compose.yml` | Flame dashboard | NFS |
@@ -111,15 +111,26 @@ already-initialized cluster and exits successfully without touching data.
 `cockroachdb_data` is a node-local volume, deliberately not NFS. A returning node
 uses its persisted store and rejoins with its original node ID.
 
-A permanently removed Swarm node remains listed as dead until it is decommissioned.
-`cockroach node` subcommands connect over the SQL port, not the inter-node RPC port,
-so they run against any surviving node's published 26257. Only decommission a node
-after confirming that it is gone for good:
+A permanently removed Swarm node is automatically reaped by the manager-pinned
+`decommissioner` service. It only acts after the CockroachDB node is not live, is
+still `active`, and its `swarm_node` locality is no longer `Ready` in `docker node ls`
+continuously for `GRACE_CHECKS` cycles (one hour by default); at least
+`MIN_LIVE_NODES` CockroachDB nodes (three by default) must still be live. It runs on a
+manager because it reads `docker node ls`, and mounts the Docker socket, which is
+root-equivalent access to that host. Set `COCKROACHDB_AUTO_DECOMMISSION=false` to
+turn it off, or raise `COCKROACHDB_DECOMMISSION_GRACE_CHECKS` when a node will be down
+longer than the grace period. With automatic decommissioning off, use these fallback
+commands against any surviving node's published SQL port 26257:
 
 ```sh
 cockroach node status --insecure --host=<surviving-node>:26257
 cockroach node decommission <dead-node-id> --insecure --host=<surviving-node>:26257
 ```
+
+Once a node has been decommissioned, if that host later rejoins the Swarm with its old
+`cockroachdb_data` volume still present, CockroachDB refuses to start it. Delete that
+volume on that host so it joins as a fresh node. This is deliberately not automated:
+automatically wiping a database store is not an acceptable default.
 
 `cockroach init` is the exception: it uses the RPC port 26357, which is why the
 `init` service targets that port and is not reachable from outside the overlay.
