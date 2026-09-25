@@ -9,7 +9,7 @@ services:
     environment:
       TZ: Asia/Seoul
       ENABLE_LOGS_GRAFANA: "true"
-      GF_PLUGINS_PREINSTALL: grafana-lokiexplore-app,grafana-metricsdrilldown-app,grafana-exploretraces-app,grafana-pyroscope-app
+      #GF_PLUGINS_PREINSTALL: grafana-lokiexplore-app,grafana-metricsdrilldown-app,grafana-exploretraces-app,grafana-pyroscope-app
       GF_USERS_DEFAULT_LANGUAGE: ko-KR
       GF_SECURITY_ALLOW_EMBEDDING: "true"
       GF_SERVER_ROOT_URL: https://grafana.nowstart.org
