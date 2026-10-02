@@ -1,6 +1,6 @@
 services:
   barosteel:
-    image: "${BAROSTEEL_IMAGE:?Set BAROSTEEL_IMAGE to a published immutable image}"
+    image: ghcr.io/now-start/barosteel:0.1.0
     user: root
     environment:
       TZ: Asia/Seoul

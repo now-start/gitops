@@ -4,7 +4,7 @@
 
 ## 구성
 
-- 이미지: `BAROSTEEL_IMAGE`에 발행된 고정 버전 또는 digest 지정
+- 이미지: `ghcr.io/now-start/barosteel:0.1.0` (다른 스택과 동일하게 Compose에서 버전 관리)
 - 설정: `configserver:http://config:8888` 필수 연결
 - DB: platform의 `barosteel.yaml`에 등록한 `{cipher}` 값을 Config Server가 복호화해 제공
 - 서버·관리 엔드포인트: platform 공통 `application.yaml` 상속
@@ -18,11 +18,11 @@ DB용 Swarm Secret과 configtree는 사용하지 않는다. Config Server는 해
 
 1. Gateway `6.1.3`과 Config Server `2.1.17`의 이미지 발행 성공을 확인한 뒤 `platform/docker-compose.yml`의 이미지 버전을 갱신한다. 현재 파일은 기존 운영 버전을 유지한다.
 2. Config Server에 바로스틸 DB 암호화 설정을 반영한다. 복호화와 MariaDB 연결은 운영 환경에서 확인한다.
-3. 바로스틸 `0.1.0` 이미지 발행 성공을 확인하고 Portainer 스택 환경에 `BAROSTEEL_IMAGE=ghcr.io/now-start/barosteel:0.1.0`을 지정한다. `.env.example`은 항목 안내용이다.
+3. Compose에 지정된 바로스틸 `0.1.0` 이미지의 발행 성공을 확인한다. 이후 릴리스도 `docker-compose.yml`의 이미지 태그를 변경해 반영한다.
 4. `docker stack config -c barosteel/docker-compose.yml`로 렌더링을 검증한 뒤 배포한다.
 5. Gateway를 통한 로그인·로그아웃·정적 파일·견적·포인트 기능을 확인한다.
 
-이미지 버전은 아직 지정하지 않았고 배포도 실행하지 않았다. 초기 관리자 등록은 애플리케이션의 관리자 초기화 절차를 따른다.
+이미지 버전은 `0.1.0`으로 지정했으며 배포는 실행하지 않았다. 초기 관리자 등록은 애플리케이션의 관리자 초기화 절차를 따른다.
 
 ## 운영 조건
 

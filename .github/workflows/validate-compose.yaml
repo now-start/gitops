@@ -19,7 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Syntax validation only; no image pull, secret creation, or deployment.
-      BAROSTEEL_IMAGE: ghcr.io/now-start/barosteel:validation
       BITWARDEN_SSO_CLIENT_SECRET: test
       FLAME_PASSWORD: test
       GRAFANA_OAUTH_CLIENT_SECRET: test
