@@ -29,6 +29,7 @@ compatibility; new callers should use this repository.
 | `grafana` | `grafana/docker-compose.yml` | Grafana LGTM observability | NFS |
 | `platform` | `platform/docker-compose.yml` | Config, Eureka, Admin, Gateway | `grafana_default` |
 | `chzzk` | `chzzk/docker-compose.yml` | nyang-nyang-bot | `platform_default`, `grafana_default`, NFS |
+| `barosteel` | `barosteel/docker-compose.yml` | Barosteel member, quote, and point service; [deployment inputs](barosteel/README.md) | `platform_default`, `grafana_default`, existing DB secrets |
 | `cockroachdb` | `cockroachdb/docker-compose.yml` | Distributed SQL cluster | local disk per node (not NFS), manager Docker socket |
 | `evergreen` | `evergreen/docker-compose.yml` | Lotto and coin services | `platform_default`, `grafana_default` |
 | `bitwarden` | `bitwarden/docker-compose.yml` | Vaultwarden | NFS |
@@ -75,10 +76,12 @@ Healthchecks are enabled only when the image contains a verified checker:
 Vaultwarden and Grafana use their bundled scripts, Flame uses Node.js, and
 Redis uses an authenticated `PING`. The Spring buildpack images are shell-less
 and currently contain no healthcheck process, so `platform`, `chzzk`, and
-`evergreen` must not receive a shell-based check. Add the Paketo health-checker
+`evergreen`, and `barosteel` must not receive a shell-based check. Add the Paketo health-checker
 at image build time before enabling their Actuator liveness probes in Swarm.
 
 ## Portainer GitOps
+
+The `barosteel` definition is prepared separately and requires a verified image and the encrypted Config Server settings before its first deployment. See [the deployment guide](barosteel/README.md).
 
 1. Create Git-backed stacks for `grafana`, `platform`, `chzzk`, `cockroachdb`,
    `evergreen`, `bitwarden`, `flame`, and `redis`. Keep the `portainer` stack manually

@@ -1,0 +1,31 @@
+services:
+  barosteel:
+    image: "${BAROSTEEL_IMAGE:?Set BAROSTEEL_IMAGE to a published immutable image}"
+    user: root
+    environment:
+      TZ: Asia/Seoul
+      SPRING_CONFIG_IMPORT: configserver:http://config:8888
+    networks:
+      - platform_default
+      - grafana_default
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+        monitor: 3m
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: pause
+        monitor: 3m
+      restart_policy:
+        condition: any
+        delay: 5s
+
+networks:
+  platform_default:
+    external: true
+  grafana_default:
+    external: true
