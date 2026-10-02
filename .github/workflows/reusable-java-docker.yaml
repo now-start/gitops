@@ -127,13 +127,27 @@ jobs:
             exit 1
           fi
 
+          # BootBuildImage exposes environment through its Gradle API, not a CLI option.
+          INIT_SCRIPT="$RUNNER_TEMP/boot-image.init.gradle"
+          cat > "$INIT_SCRIPT" <<'GRADLE'
+          allprojects {
+              plugins.withId('org.springframework.boot') {
+                  tasks.named('bootBuildImage') {
+                      environment.putAll([
+                          'BP_OCI_SOURCE': System.getenv('SOURCE_URL'),
+                          'BP_OCI_REVISION': System.getenv('SOURCE_SHA')
+                      ])
+                  }
+              }
+          }
+          GRADLE
+
           ./gradlew "$GRADLE_TASK" \
+            --init-script "$INIT_SCRIPT" \
             --imageName="$ARCH_IMAGE" \
             --imagePlatform="linux/$ARCH" \
             --build-cache \
-            -Dorg.gradle.jvmargs="-Xmx2g" \
-            --environment "BP_OCI_SOURCE=$SOURCE_URL" \
-            --environment "BP_OCI_REVISION=$SOURCE_SHA"
+            -Dorg.gradle.jvmargs="-Xmx2g"
 
           docker image inspect "$ARCH_IMAGE" |
             jq -e --arg arch "$ARCH" --arg sha "$SOURCE_SHA" '
