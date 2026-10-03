@@ -1,6 +1,6 @@
 services:
   barosteel:
-    image: ghcr.io/now-start/barosteel:0.1.2
+    image: ghcr.io/now-start/barosteel:0.1.3
     user: root
     environment:
       TZ: Asia/Seoul
