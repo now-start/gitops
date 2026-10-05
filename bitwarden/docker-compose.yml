@@ -1,6 +1,6 @@
 services:
   bitwarden:
-    image: vaultwarden/server:1.37.3
+    image: vaultwarden/server:1.37.4
     ports:
       - target: 80
         published: 1080
