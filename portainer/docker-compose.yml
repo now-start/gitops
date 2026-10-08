@@ -52,7 +52,7 @@ services:
         delay: 5s
 
   portainer:
-    image: portainer/portainer-ce:2.45.1
+    image: portainer/portainer-ce:2.45.2
     command: -H tcp://tasks.agent:9001 --tlsskipverify
     ports:
       - target: 9443
