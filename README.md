@@ -59,11 +59,25 @@ condition `any`. Only the healthcheck command varies by service. Stacks whose
 images do not provide a usable checker still use the same deploy policy without
 a healthcheck.
 
-Most services use one replicated task. In the `platform` stack, `config` and
-`gateway` use global mode so Swarm runs one task on every eligible `x86_64`
-node, which corresponds to their current `linux/amd64` images. `eureka` and
-`admin` remain single-replica services. Remove the architecture constraint only
-after both global images are published as multi-platform images.
+Most services use one replicated task. In the `platform` stack, `config`,
+`eureka`, and `gateway` use global mode so Swarm runs one task on every eligible
+node using their multi-platform images. `admin` remains a single-replica service.
+
+Eureka 2.5.0 discovers individual peers through `tasks.platform_eureka` on the
+shared overlay and refreshes its replication peers every 10 seconds. Adding an
+eligible node needs no peer URL edits. Clients keep `http://eureka:8761/eureka/`;
+no host port or per-node DNS entry is required. The stack must be named
+`platform` for the configured task DNS name to match. Discovery settings live in
+the platform Config Server's `config/eureka/eureka.yaml`, not Compose environment
+variables. Publish the platform's Eureka 2.5.0 image and its Config Server settings
+before deploying this Compose change.
+
+After rollout, verify peer discovery and registry convergence by adding and
+removing a node, restarting a task (its IP changes), and registering a service
+through the shared client URL. Query each task's `/eureka/apps` directly to
+check replication. Compose validation cannot prove cross-node DNS or replication.
+The existing update policy has no application readiness check; it does not
+guarantee uninterrupted registry access during updates.
 
 The `evergreen` stack pins only `coin` to `node.hostname == NOW_START`; `lotto`
 keeps the shared scheduling defaults. If that node is unavailable or drained,
