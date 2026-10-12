@@ -8,6 +8,7 @@ setup() {
   export SOURCE_SHA=0123456789abcdef TAG_EXISTS=false REGISTRY_USER=bot REGISTRY_PASSWORD=test
   export IMAGE_NAME=ghcr.io/example/app ARCH=arm64 SOURCE_URL=https://github.com/example/app
   export GITHUB_STEP_SUMMARY="$BATS_TEST_TMPDIR/summary"
+  export RUNNER_TEMP="$BATS_TEST_TMPDIR"
   cd "$BATS_TEST_TMPDIR"
   printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" > gradle-call\n' > gradlew
   chmod +x gradlew

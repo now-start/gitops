@@ -31,7 +31,7 @@ setup() {
     "$WORKFLOWS_DIR/reusable-java-docker.yaml"
   [ "$status" -eq 0 ]
 
-  run grep -F 'BP_OCI_REVISION=$SOURCE_SHA' \
+  run grep -F "'BP_OCI_REVISION': System.getenv('SOURCE_SHA')" \
     "$WORKFLOWS_DIR/reusable-java-docker.yaml"
   [ "$status" -eq 0 ]
 }
