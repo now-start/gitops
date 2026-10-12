@@ -3,6 +3,7 @@ name: Validate Workflows
 on:
   pull_request:
     paths:
+      - ".github/actionlint.yaml"
       - ".github/workflows/**"
       - "tests/**"
       - "examples/**"
@@ -10,6 +11,7 @@ on:
   push:
     branches: [main]
     paths:
+      - ".github/actionlint.yaml"
       - ".github/workflows/**"
       - "tests/**"
       - "examples/**"

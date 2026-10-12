@@ -1,0 +1,6 @@
+# GitHub-hosted preview label missing from actionlint v1.7.12's built-in list.
+# Remove this compatibility entry when actionlint recognizes it natively.
+# https://github.blog/changelog/2026-06-11-new-runner-images-in-public-preview/
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

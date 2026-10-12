@@ -10,7 +10,7 @@ FAIL=0
 
 # ── actionlint ───────────────────────────────────────────────────────────────
 echo "━━━━ actionlint: workflow YAML validation ━━━━"
-if actionlint "$WORKFLOWS_DIR"/*.yaml "$REPO_ROOT"/examples/*.yaml 2>&1; then
+if actionlint -config-file "$REPO_ROOT/.github/actionlint.yaml" "$WORKFLOWS_DIR"/*.yaml "$REPO_ROOT"/examples/*.yaml 2>&1; then
   echo "✅ actionlint passed"
   PASS=$((PASS + 1))
 else
