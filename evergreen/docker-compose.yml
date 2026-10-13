@@ -29,7 +29,7 @@ services:
 
   coin:
     <<: *service-defaults
-    image: ghcr.io/now-start/evergreen:2.2.5
+    image: ghcr.io/now-start/evergreen:2.2.6
     deploy:
       <<: *deploy-defaults
       placement:
