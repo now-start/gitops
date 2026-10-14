@@ -3,6 +3,10 @@ name: Reusable Java Prepare
 on:
   workflow_call:
     inputs:
+      java-version:
+        description: Explicit JDK version, empty for automatic detection
+        type: string
+        default: ''
       module:
         description: Gradle submodule name, empty for a single-module project
         type: string
@@ -36,12 +40,13 @@ permissions:
 jobs:
   metadata:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       version: ${{ steps.version.outputs.version }}
       java-version: ${{ steps.java-info.outputs.version }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Validate module name
         if: ${{ inputs.module != '' }}
@@ -56,33 +61,33 @@ jobs:
       - name: Detect Java version
         id: java-info
         env:
+          INPUT_JAVA_VERSION: ${{ inputs.java-version }}
           MODULE: ${{ inputs.module }}
         run: |
-          BUILD_FILES=()
-          if [ -n "$MODULE" ]; then
-            BUILD_FILES+=("$MODULE/build.gradle" "$MODULE/build.gradle.kts")
-          fi
-          BUILD_FILES+=("build.gradle" "build.gradle.kts")
-
-          for BUILD_FILE in "${BUILD_FILES[@]}"; do
-            [ -f "$BUILD_FILE" ] || continue
-
-            VERSION=$(grep -Eo "JavaLanguageVersion.of\([0-9]+\)" "$BUILD_FILE" | head -1 | sed -E 's/[^0-9]//g')
-            VERSION=${VERSION:-$(grep -Eo "(source|target)Compatibility[[:space:]]*=[[:space:]]*['\"]?[0-9]+['\"]?" "$BUILD_FILE" | head -1 | sed -E 's/[^0-9]//g')}
-            VERSION=${VERSION:-$(grep -Eo "JavaVersion\.VERSION_[0-9]+" "$BUILD_FILE" | head -1 | sed -E 's/[^0-9]//g')}
-
-            if [ -n "$VERSION" ]; then
-              break
+          if [ -n "$INPUT_JAVA_VERSION" ]; then
+            VERSION="$INPUT_JAVA_VERSION"
+          else
+            BUILD_FILES=()
+            if [ -n "$MODULE" ]; then
+              BUILD_FILES+=("$MODULE/build.gradle" "$MODULE/build.gradle.kts")
             fi
-          done
-
+            BUILD_FILES+=("build.gradle" "build.gradle.kts")
+            VERSION=''
+            for BUILD_FILE in "${BUILD_FILES[@]}"; do
+              [ -f "$BUILD_FILE" ] || continue
+              VERSION=$(grep -Eo 'JavaLanguageVersion\.of\([0-9]+\)' "$BUILD_FILE" | head -1 | sed -E 's/[^0-9]//g' || true)
+              VERSION=${VERSION:-$(grep -Eo "(source|target)Compatibility[[:space:]]*=[[:space:]]*['\"]?[0-9]+(\.[0-9]+)?['\"]?" "$BUILD_FILE" | head -1 | sed -E 's/[^0-9.]//g' || true)}
+              VERSION=${VERSION:-$(grep -Eo 'JavaVersion\.VERSION_[0-9]+(_[0-9]+)?' "$BUILD_FILE" | head -1 | sed -E 's/JavaVersion\.VERSION_//; s/_/./g' || true)}
+              VERSION=${VERSION#1.}
+              [ -z "$VERSION" ] || break
+            done
+          fi
           if [ -z "$VERSION" ]; then
-            echo "❌ Error: Could not extract Java version from Gradle build files: ${BUILD_FILES[*]}"
+            echo 'Could not detect Java version; provide the java-version input' >&2
             exit 1
           fi
-
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "✅ Detected Java version: $VERSION ($BUILD_FILE)"
+          echo "Using Java version: $VERSION"
 
       - name: Set up JDK ${{ steps.java-info.outputs.version }}
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
@@ -99,7 +104,8 @@ jobs:
           chmod +x gradlew
 
           GRADLE_TASK="${MODULE:+:$MODULE:}properties"
-          VERSION=$(./gradlew "$GRADLE_TASK" -q --no-daemon | grep "^version:" | awk '{print $2}')
+          GRADLE_PROPERTIES=$(./gradlew "$GRADLE_TASK" -q --no-daemon)
+          VERSION=$(awk '/^version:/ {print $2}' <<< "$GRADLE_PROPERTIES")
 
           if [ -z "$VERSION" ] || [ "$VERSION" = "unspecified" ]; then
             echo "❌ Error: Could not extract version from Gradle properties"

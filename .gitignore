@@ -23,3 +23,9 @@ compose.override.yml
 *.log
 *.tmp
 *~
+
+# Local IDE metadata and review reports
+*.iml
+Thumbs.db
+Desktop.ini
+/*_REVIEW_20??-??-??.md

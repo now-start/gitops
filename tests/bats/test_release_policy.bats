@@ -100,3 +100,44 @@ policy_script() {
   ' "$WORKFLOWS_DIR"
   [ "$status" -eq 0 ]
 }
+
+
+@test "orchestrator conditions allow recovery but block failed cancelled and completed releases" {
+  run ruby -ryaml -e '
+    %w[java python].each do |lang|
+      jobs = YAML.load_file("#{ARGV[0]}/reusable-#{lang}-app.yaml")["jobs"]
+      abort unless jobs["docker"]["needs"] == %w[prepare build]
+      abort unless jobs["release"]["needs"] == %w[prepare docker]
+      evaluate = lambda do |expr, values, success, cancelled|
+        expr = expr.sub(/\A\s*\$\{\{/, "").sub(/\}\}\s*\z/, "")
+        explicit = expr.include?("cancelled()")
+        expr = expr.gsub("cancelled()", cancelled.to_s)
+        expr = expr.gsub(/needs\.(prepare|build|docker)\.(outputs\.(tag-exists|release-exists)|result)/) { |key| values.fetch(key).inspect }
+        (explicit || success) && eval(expr)
+      end
+      # tag, release, prepare result, build result, cancelled, expect Docker
+      [
+        ["false", "false", "success", "success", false, true],
+        ["true", "false", "success", "skipped", false, true],
+        ["true", "true", "success", "skipped", false, false],
+        ["false", "false", "success", "failure", false, false],
+        ["true", "false", "failure", "skipped", false, false],
+        ["true", "false", "success", "skipped", true, false],
+        ["false", "false", "success", "skipped", false, false],
+        ["false", "false", "success", "cancelled", false, false]
+      ].each do |tag, release, prepare, build, cancelled, expected|
+        values = {"needs.prepare.outputs.tag-exists" => tag, "needs.prepare.outputs.release-exists" => release,
+                  "needs.prepare.result" => prepare, "needs.build.result" => build}
+        actual = evaluate.call(jobs["docker"]["if"], values, prepare == "success" && build == "success", cancelled)
+        abort "#{lang} wrong Docker decision for #{values}" unless actual == expected
+        ["success", "failure", "skipped", "cancelled"].each do |docker|
+          values["needs.docker.result"] = docker
+          actual = evaluate.call(jobs["release"]["if"], values, prepare == "success" && docker == "success" && !cancelled, cancelled)
+          wanted = prepare == "success" && docker == "success" && release == "false" && !cancelled
+          abort "#{lang} wrong Release decision" unless actual == wanted
+        end
+      end
+    end
+  ' "$WORKFLOWS_DIR"
+  [ "$status" -eq 0 ]
+}

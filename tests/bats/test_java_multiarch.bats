@@ -107,3 +107,57 @@ build() { run_step docker 'Build and push architecture image'; }
   [ "$status" -eq 0 ]
   [ ! -f gradle-call ]
 }
+
+@test "tagged release recovery validates both architectures without publication" {
+  export FINAL_EXISTS=true TAG_EXISTS=true
+  build
+  [ "$status" -eq 0 ]
+  [ ! -f gradle-call ]
+  publish
+  [ "$status" -eq 0 ]
+  grep -F 'inspect ghcr.io/example/app@sha256:amd64' "$MOCK_LOG"
+  grep -F 'inspect ghcr.io/example/app@sha256:arm64' "$MOCK_LOG"
+  [ ! -f "$MOCK_CREATED" ]
+  ! grep -q '^push ' "$MOCK_LOG"
+}
+
+@test "tagged release with missing image cannot rebuild architecture" {
+  export TAG_EXISTS=true
+  build
+  [ "$status" -ne 0 ]
+  [[ "$output" == *'Git tag exists but immutable image is missing'* ]]
+  [ ! -f gradle-call ]
+  ! grep -q '^push ' "$MOCK_LOG"
+}
+
+@test "Gradle build failure prevents architecture push" {
+  printf '#!/usr/bin/env bash
+exit 42
+' > gradlew
+  build
+  [ "$status" -eq 42 ]
+  ! grep -q '^push ' "$MOCK_LOG"
+}
+
+@test "wrong local revision is rejected before architecture push" {
+  export LOCAL_SHA=wrong
+  build
+  [ "$status" -ne 0 ]
+  ! grep -q '^push ' "$MOCK_LOG"
+}
+
+@test "Java build passes OCI metadata through Gradle init script" {
+  build
+  [ "$status" -eq 0 ]
+  grep -F -- '--init-script ' gradle-call
+  grep -Fq "'BP_OCI_REVISION': System.getenv('SOURCE_SHA')" "$RUNNER_TEMP/boot-image.init.gradle"
+  ! grep -q -- '--environment' gradle-call
+}
+
+@test "Java Docker checkout uses the supplied source SHA" {
+  run ruby -ryaml -e '
+    steps = YAML.load_file(ARGV[0])["jobs"]["docker"]["steps"]
+    abort unless steps.find { |s| s["name"] == "Checkout repository" }["with"]["ref"] == "${{ inputs.source-sha }}"
+  ' "$WORKFLOW"
+  [ "$status" -eq 0 ]
+}

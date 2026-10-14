@@ -42,10 +42,10 @@ setup() {
   [ "$status" -ne 0 ]
 }
 
-@test "Java publication runs only for a new version tag" {
+@test "Java build runs only for a new version tag" {
   run ruby -ryaml -e '
     jobs = YAML.load_file(ARGV[0]).fetch("jobs")
-    %w[build docker release].each do |name|
+    %w[build].each do |name|
       abort unless jobs.fetch(name).fetch("if") == "needs.prepare.outputs.tag-exists == '\''false'\''"
     end
   ' "$WORKFLOWS_DIR/reusable-java-app.yaml"

@@ -31,7 +31,7 @@ case "$*" in
     ;;
   'buildx imagetools create '*) touch "$MOCK_CREATED" ;;
   'image inspect '*)
-    jq -n --arg arch "${LOCAL_ARCH:-$ARCH}" --arg sha "$SOURCE_SHA" '[{Os:"linux",Architecture:$arch,Config:{Labels:{"org.opencontainers.image.revision":$sha}}}]'
+    jq -n --arg arch "${LOCAL_ARCH:-$ARCH}" --arg sha "${LOCAL_SHA:-$SOURCE_SHA}" '[{Os:"linux",Architecture:$arch,Config:{Labels:{"org.opencontainers.image.revision":$sha}}}]'
     ;;
   'run --rm --entrypoint /cnb/lifecycle/launcher '*)
     if [[ "$*" != *' -- java -version' ]]; then

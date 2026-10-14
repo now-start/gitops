@@ -8,6 +8,11 @@ on:
         required: false
         type: string
         default: 'ghcr.io/now-start'
+      java-version:
+        description: 'Explicit JDK version; leave empty to detect it from Gradle files'
+        required: false
+        type: string
+        default: ''
       module:
         description: 'Gradle submodule name (e.g., config-service). Empty for single-module projects.'
         required: false
@@ -19,7 +24,7 @@ on:
         required: true
 
 concurrency:
-  group: ${{ github.repository }}-${{ inputs.module || 'root' }}-${{ github.event_name }}-${{ github.ref }}-release
+  group: ${{ github.repository }}-java-${{ inputs.module || 'root' }}-${{ github.event_name }}-${{ github.ref }}-release
   cancel-in-progress: false
 
 permissions:
@@ -31,12 +36,14 @@ jobs:
     uses: ./.github/workflows/reusable-java-test.yaml
     with:
       module: ${{ inputs.module }}
+      java-version: ${{ inputs.java-version }}
 
   prepare:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: ./.github/workflows/reusable-java-prepare.yaml
     with:
       module: ${{ inputs.module }}
+      java-version: ${{ inputs.java-version }}
 
   build:
     if: needs.prepare.outputs.tag-exists == 'false'
@@ -47,7 +54,12 @@ jobs:
       module: ${{ inputs.module }}
 
   docker:
-    if: needs.prepare.outputs.tag-exists == 'false'
+    # A tagged version may verify its existing image to recover a missing release.
+    if: >-
+      ${{ !cancelled() && needs.prepare.result == 'success' &&
+          needs.prepare.outputs.release-exists == 'false' &&
+          (needs.build.result == 'success' ||
+           (needs.prepare.outputs.tag-exists == 'true' && needs.build.result == 'skipped')) }}
     needs: [prepare, build]
     permissions:
       contents: read
@@ -64,7 +76,9 @@ jobs:
       registry-password: ${{ secrets.registry-password }}
 
   release:
-    if: needs.prepare.outputs.tag-exists == 'false'
+    if: >-
+      ${{ !cancelled() && needs.prepare.result == 'success' &&
+          needs.docker.result == 'success' && needs.prepare.outputs.release-exists == 'false' }}
     needs: [prepare, docker]
     permissions:
       contents: write

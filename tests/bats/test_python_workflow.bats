@@ -54,6 +54,13 @@ install_stubs() {
     [ "$TEST_RELEASE_STATUS" -lt 400 ] || return 22
   }
   docker() {
+    if [[ "$*" == *' --format '* ]]; then
+      local arch=amd64
+      [[ "$4" != *@sha256:bbbb* ]] || arch=arm64
+      jq -n --arg arch "${TEST_CONFIG_ARCH:-$arch}" --arg sha "${TEST_CONFIG_SHA:-${TEST_TAG_SHA:-$GITHUB_SHA}}" \
+        '{os:"linux",architecture:$arch,config:{Labels:{"org.opencontainers.image.revision":$sha}}}'
+      return
+    fi
     printf '%s' "$TEST_IMAGE_OUTPUT"
     return "$TEST_IMAGE_STATUS"
   }
@@ -62,6 +69,7 @@ install_stubs() {
 }
 
 run_state() {
+  : > "$GITHUB_OUTPUT"
   install_stubs
   local script
   script="$(step_script 'Check release state')"$'\n'
@@ -84,7 +92,7 @@ run_state() {
     abort unless jobs["build"]["needs"] == "prepare"
     abort unless jobs["docker"]["needs"] == %w[prepare build]
     abort unless jobs["release"]["needs"] == %w[prepare docker]
-    %w[build docker release].each do |name|
+    %w[build].each do |name|
       abort unless jobs[name]["if"] == "needs.prepare.outputs.tag-exists == '\''false'\''"
     end
   ' "$WORKFLOWS_DIR/reusable-python-app.yaml" "$WORKFLOWS_DIR/../.."
@@ -146,7 +154,7 @@ run_state() {
 
 @test "same revision image can resume interrupted release creation" {
   export TEST_IMAGE_STATUS=0
-  export TEST_IMAGE_OUTPUT="{\"annotations\":{\"org.opencontainers.image.revision\":\"$GITHUB_SHA\"}}"
+  valid_image "$GITHUB_SHA"
   run_state
   [ "$status" -eq 0 ]
   grep -qx 'image-exists=true' "$GITHUB_OUTPUT"
@@ -190,7 +198,7 @@ run_state() {
 @test "existing prerelease reuses its tagged image even after later commits" {
   export TEST_RELEASE_STATUS=200 TEST_IMAGE_STATUS=0
   export TEST_TAG_SHA=2222222222222222222222222222222222222222
-  export TEST_IMAGE_OUTPUT="{\"annotations\":{\"org.opencontainers.image.revision\":\"$TEST_TAG_SHA\"}}"
+  valid_image "$TEST_TAG_SHA"
   run_state
   [ "$status" -eq 0 ]
   grep -qx 'release-exists=true' "$GITHUB_OUTPUT"
@@ -281,4 +289,62 @@ run_state() {
   done
   grep -qx "source-sha=$GITHUB_SHA" "$GITHUB_OUTPUT"
   [ ! -e "$RUNNER_TEMP/calls" ]
+}
+
+
+valid_image() {
+  TEST_IMAGE_OUTPUT=$(jq -n --arg sha "$1" '{
+    annotations:{"org.opencontainers.image.revision":$sha},
+    manifests:[
+      {digest:("sha256:" + ("a" * 64)),platform:{os:"linux",architecture:"amd64"}},
+      {digest:("sha256:" + ("b" * 64)),platform:{os:"linux",architecture:"arm64"}},
+      {digest:("sha256:" + ("c" * 64)),platform:{os:"unknown",architecture:"unknown"},
+       annotations:{"vnd.docker.reference.type":"attestation-manifest"}}
+    ]}')
+  export TEST_IMAGE_OUTPUT
+}
+
+@test "Python image rejects a missing ARM descriptor despite matching annotation" {
+  export TEST_IMAGE_STATUS=0
+  valid_image "$GITHUB_SHA"
+  TEST_IMAGE_OUTPUT=$(jq 'del(.manifests[1])' <<< "$TEST_IMAGE_OUTPUT")
+  run_state
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'must contain linux/amd64 and linux/arm64'* ]]
+  ! grep -q 'image-exists=true' "$GITHUB_OUTPUT"
+}
+
+@test "Python image verifies child revisions and architecture, not just index annotation" {
+  export TEST_IMAGE_STATUS=0 TEST_CONFIG_SHA=wrong
+  valid_image "$GITHUB_SHA"
+  run_state
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'revision or architecture does not match'* ]]
+  unset TEST_CONFIG_SHA
+  export TEST_CONFIG_ARCH=arm64
+  run_state
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'revision or architecture does not match'* ]]
+}
+
+@test "missing release is recovered after tagged images are verified without creating another tag" {
+  export TEST_IMAGE_STATUS=0 TEST_TAG_SHA="$GITHUB_SHA"
+  valid_image "$GITHUB_SHA"
+  run_state
+  [ "$status" -eq 0 ]
+  grep -qx 'tag-exists=true' "$GITHUB_OUTPUT"
+  grep -qx 'release-exists=false' "$GITHUB_OUTPUT"
+  export SOURCE_SHA="$TEST_TAG_SHA"
+  run bash -e -o pipefail -c "$(step_script 'Create version tag and release')"
+  [ "$status" -eq 0 ]
+  grep -q 'gh release create' "$RUNNER_TEMP/calls"
+  ! grep -q '^git ' "$RUNNER_TEMP/calls"
+}
+
+@test "Python Docker checkout uses the revision supplied by prepare" {
+  run ruby -ryaml -e '
+    steps = YAML.load_file(ARGV[0])["jobs"]["docker"]["steps"]
+    abort unless steps.find { |s| s["name"] == "Checkout repository" }["with"]["ref"] == "${{ inputs.source-sha }}"
+  ' "$WORKFLOWS_DIR/reusable-python-docker.yaml"
+  [ "$status" -eq 0 ]
 }

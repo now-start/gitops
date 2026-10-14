@@ -1,66 +1,94 @@
 #!/usr/bin/env bats
-# reusable-java-prepare.yaml 의 Java 버전 자동 감지 로직 테스트
 
 setup() {
-  FIXTURES_DIR="$BATS_TEST_TMPDIR/build-gradle"
-  mkdir -p "$FIXTURES_DIR"
+  WORKFLOWS_DIR="$BATS_TEST_DIRNAME/../../.github/workflows"
+  export GITHUB_OUTPUT="$BATS_TEST_TMPDIR/output" INPUT_JAVA_VERSION='' MODULE=''
+  cd "$BATS_TEST_TMPDIR"
 }
 
-detect_java_version() {
-  local BUILD_FILE="$1"
-  local VERSION
-
-  VERSION=$(grep -Eo "JavaLanguageVersion.of\([0-9]+\)" "$BUILD_FILE" | head -1 | sed -E 's/[^0-9]//g')
-  VERSION=${VERSION:-$(grep -Eo "(source|target)Compatibility[[:space:]]*=[[:space:]]*['\"]?[0-9]+['\"]?" "$BUILD_FILE" | head -1 | sed -E 's/[^0-9]//g')}
-  VERSION=${VERSION:-$(grep -Eo "JavaVersion\.VERSION_[0-9]+" "$BUILD_FILE" | head -1 | sed -E 's/[^0-9]//g')}
-
-  echo "$VERSION"
+run_detector() {
+  local script
+  script=$(ruby -ryaml -e '
+    jobs = YAML.load_file(ARGV[0])["jobs"]
+    puts jobs.values.flat_map { |j| j.fetch("steps", []) }.find { |s| s["name"] == "Detect Java version" }["run"]
+  ' "$WORKFLOWS_DIR/reusable-java-$1.yaml")
+  run bash -e -o pipefail -c "$script"
 }
 
-@test "detects JavaLanguageVersion.of(17)" {
-  echo 'java { toolchain { languageVersion = JavaLanguageVersion.of(17) } }' \
-    > "$FIXTURES_DIR/toolchain.gradle"
-  run detect_java_version "$FIXTURES_DIR/toolchain.gradle"
-  [ "$output" = "17" ]
+@test "actual Java detectors support toolchain compatibility constants and legacy Java 8" {
+  for workflow in prepare test; do
+    for fixture in 'JavaLanguageVersion.of(21)|21' 'sourceCompatibility = "17"|17' 'targetCompatibility = "1.8"|8' 'sourceCompatibility = JavaVersion.VERSION_1_8|8' 'sourceCompatibility = JavaVersion.VERSION_21|21'; do
+      printf '%s\n' "${fixture%|*}" > build.gradle
+      : > "$GITHUB_OUTPUT"
+      run_detector "$workflow"
+      [ "$status" -eq 0 ]
+      grep -qx "version=${fixture##*|}" "$GITHUB_OUTPUT"
+    done
+  done
 }
 
-@test "detects JavaLanguageVersion.of(21)" {
-  echo 'java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }' \
-    > "$FIXTURES_DIR/toolchain21.gradle"
-  run detect_java_version "$FIXTURES_DIR/toolchain21.gradle"
-  [ "$output" = "21" ]
+@test "explicit Java version supports projects with no literal Gradle toolchain" {
+  export INPUT_JAVA_VERSION=21
+  for workflow in prepare test; do
+    run_detector "$workflow"
+    [ "$status" -eq 0 ]
+    grep -qx 'version=21' "$GITHUB_OUTPUT"
+  done
 }
 
-@test "detects sourceCompatibility = '11'" {
-  echo "sourceCompatibility = '11'" \
-    > "$FIXTURES_DIR/compat_source.gradle"
-  run detect_java_version "$FIXTURES_DIR/compat_source.gradle"
-  [ "$output" = "11" ]
+@test "module Java configuration wins and empty module falls back to root" {
+  export MODULE=config
+  mkdir config
+  printf 'JavaLanguageVersion.of(17)\n' > build.gradle
+  for workflow in prepare test; do
+    printf 'JavaLanguageVersion.of(21)\n' > config/build.gradle.kts
+    : > "$GITHUB_OUTPUT"
+    run_detector "$workflow"
+    [ "$status" -eq 0 ]
+    grep -qx 'version=21' "$GITHUB_OUTPUT"
+    printf 'version = "1.0.0"\n' > config/build.gradle.kts
+    : > "$GITHUB_OUTPUT"
+    run_detector "$workflow"
+    [ "$status" -eq 0 ]
+    grep -qx 'version=17' "$GITHUB_OUTPUT"
+  done
 }
 
-@test "detects targetCompatibility = \"17\"" {
-  echo 'targetCompatibility = "17"' \
-    > "$FIXTURES_DIR/compat_target.gradle"
-  run detect_java_version "$FIXTURES_DIR/compat_target.gradle"
-  [ "$output" = "17" ]
+@test "missing Java version fails with an actionable error" {
+  for workflow in prepare test; do
+    run_detector "$workflow"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *'provide the java-version input'* ]]
+    [ ! -s "$GITHUB_OUTPUT" ]
+  done
 }
 
-@test "detects JavaVersion.VERSION_21" {
-  echo "sourceCompatibility = JavaVersion.VERSION_21" \
-    > "$FIXTURES_DIR/javaversion.gradle"
-  run detect_java_version "$FIXTURES_DIR/javaversion.gradle"
-  [ "$output" = "21" ]
+@test "Gradle failure after printing a version stops metadata without pipefail" {
+  printf '#!/usr/bin/env bash\necho "version: 1.2.3"\nexit 42\n' > gradlew
+  local script
+  script=$(ruby -ryaml -e '
+    puts YAML.load_file(ARGV[0])["jobs"]["metadata"]["steps"].find { |s| s["name"] == "Extract version from build.gradle" }["run"]
+  ' "$WORKFLOWS_DIR/reusable-java-prepare.yaml")
+  run bash -e -c "$script"
+  [ "$status" -eq 42 ]
+  [ ! -s "$GITHUB_OUTPUT" ]
 }
 
-@test "JavaLanguageVersion takes precedence over sourceCompatibility" {
-  printf 'sourceCompatibility = "11"\njava { toolchain { languageVersion = JavaLanguageVersion.of(17) } }\n' \
-    > "$FIXTURES_DIR/precedence.gradle"
-  run detect_java_version "$FIXTURES_DIR/precedence.gradle"
-  [ "$output" = "17" ]
+
+@test "Java orchestrator forwards an explicit JDK to prepare and PR tests" {
+  run ruby -ryaml -e '
+    app = YAML.load_file(ARGV[0])["jobs"]
+    %w[prepare test-only].each { |name| abort unless app[name]["with"]["java-version"] == "${{ inputs.java-version }}" }
+  ' "$WORKFLOWS_DIR/reusable-java-app.yaml"
+  [ "$status" -eq 0 ]
 }
 
-@test "returns empty when no Java version found" {
-  echo 'version = "1.0.0"' > "$FIXTURES_DIR/no_java.gradle"
-  run detect_java_version "$FIXTURES_DIR/no_java.gradle"
-  [ "$output" = "" ]
+@test "toolchain takes priority over compatibility in actual YAML scripts" {
+  printf "sourceCompatibility = 11\nJavaLanguageVersion.of(17)\n" > build.gradle
+  for workflow in prepare test; do
+    : > "$GITHUB_OUTPUT"
+    run_detector "$workflow"
+    [ "$status" -eq 0 ]
+    grep -qx 'version=17' "$GITHUB_OUTPUT"
+  done
 }

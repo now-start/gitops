@@ -11,10 +11,11 @@ application repository
   PR / develop / manual -> test
   main push       -> version check
                     -> new version: test -> ghcr.io/...:{version} -> GitHub Release
-                    -> existing version: skip
+                    -> existing tag + release: skip
+                    -> existing tag only: verify image -> recover release
 
 gitops repository
-  Renovate PR   -> compose image version update -> merge
+  Renovate PR     -> compose image version update -> merge
 
 Portainer
   main polling    -> Docker Swarm stack reconciliation
@@ -42,10 +43,10 @@ Java와 Python은 동일한 버전 검증·태그 확인·릴리스 발행 workf
   정식 버전도 Docker `latest` 태그는 만들지 않습니다.
 - 선행 0, `SNAPSHOT`, `+build`, PEP 440 축약형은 발행 버전으로 허용하지 않습니다.
   `0.0.0`은 유효한 정식 버전이며 Java에서도 더 이상 자동 건너뛰지 않습니다.
-- 이미 Git 태그가 있는 버전은 main에 새 커밋이 push되어도 검사, 이미지 확인·빌드,
-  Release 단계를 모두 건너뜁니다. 새 이미지를 발행하려면 프로젝트 버전을 올려야 합니다.
+- 이미 Git 태그와 Release가 있는 버전은 main에 새 커밋이 push되어도 검사·발행을 건너뜁니다.
+  태그만 있고 Release가 없으면 기존 이미지를 검증하여 Release만 복구합니다. 새 이미지를 발행하려면 프로젝트 버전을 올려야 합니다.
 - 이미지 발행 후 Git 태그 생성 전에 실패하면 같은 이미지를 재사용하여 재시도합니다.
-  Git 태그가 생성된 뒤 Release 생성이 실패한 경우에는 수동 복구가 필요합니다.
+  Git 태그가 생성된 뒤 Release 생성이 실패하면 재실행에서 기존 이미지를 검증한 뒤 Release만 복구합니다.
 
 ```text
 Java prepare   -> Gradle metadata ─┐
@@ -121,7 +122,8 @@ reusable-python-app.yaml
   PR / develop push / 수동 실행 -> reusable-python-test.yaml
   main push
     -> reusable-python-prepare.yaml  (메타데이터 추출·공통 정책 호출)
-    -> 기존 버전이면 종료
+    -> 태그와 Release가 있으면 종료
+    -> 태그만 있으면 기존 이미지 검증 후 Release 복구
     -> 새 버전이면 reusable-python-test.yaml     (uv 기반 검증)
                    -> reusable-python-docker.yaml   (불변 이미지 확인·빌드·발행)
                    -> reusable-python-release.yaml  (공통 발행 호출)
@@ -140,7 +142,7 @@ Docker image:  ghcr.io/now-start/{repository}:2.0.0-alpha.1
 
 기존 Git 태그와 이미지 revision을 확인하여 발행된 버전을 덮어쓰지 않습니다.
 이미지가 발행된 후 Git 태그 생성 전에 실패했다면 같은 revision의 이미지를 재사용합니다.
-Git 태그 생성 뒤 Release만 누락된 경우에는 수동으로 복구해야 합니다.
+Git 태그 생성 뒤 Release만 누락된 경우에는 재실행에서 기존 이미지를 검증한 뒤 Release만 복구합니다.
 이미 Release가 있는 버전은 새 이미지를 발행하지 않으므로 다음 발행에는 버전을 올립니다.
 Java도 같은 stable/alpha/beta/RC 정책을 사용합니다.
 
@@ -172,10 +174,10 @@ Git tag:       config-2.1.14
 Docker image:  ghcr.io/now-start/config:2.1.14
 ```
 
-이미 Git 태그가 존재하는 모듈은 검사와 Docker 단계를 건너뛰므로, 한 모듈의
+이미 Git 태그와 Release가 존재하는 모듈은 검사와 Docker 단계를 건너뛰므로, 한 모듈의
 버전만 올라간 main push에서는 해당 모듈만 검사하고 이미지를 발행합니다.
 이미지 발행 후 tag 생성 전에 실패한 경우에는 OCI revision이 같은 기존 이미지를
-재사용합니다. tag 생성 뒤 release만 누락된 경우에는 수동으로 복구해야 합니다.
+재사용합니다. tag 생성 뒤 release만 누락된 경우에는 재실행에서 기존 이미지를 검증한 뒤 Release만 복구합니다.
 
 ## 입력과 Secret
 
@@ -183,6 +185,7 @@ Docker image:  ghcr.io/now-start/config:2.1.14
 | --- | --- | --- |
 | `registry-org` | `ghcr.io/now-start` | 이미지 registry와 namespace |
 | `module` | 빈 값 | Gradle 모듈 및 이미지 이름 |
+| `java-version` | 빈 값 | 명시적 JDK 버전, 생략 시 Gradle 파일에서 감지 |
 | `registry-password` | 필수 | 이미지 push에 사용할 token |
 
 ## 실행 과정
@@ -194,7 +197,8 @@ pull_request / non-main push / workflow_dispatch
 main push
   -> reusable-java-prepare.yaml
        Gradle/Java metadata 추출 -> 공통 버전·Git 태그·Release 확인
-  -> 기존 버전이면 종료
+  -> 태그와 Release가 있으면 종료
+    -> 태그만 있으면 기존 이미지 검증 후 Release 복구
   -> 새 버전이면 reusable-java-test.yaml
                -> reusable-java-docker.yaml
                     ghcr.io/...:{version} build and push
@@ -208,7 +212,7 @@ main push
 
 ## GitOps 승격과 롤백
 
-새 이미지가 발행되면 `gitops` 저장소의 Renovate이 Compose 이미지
+새 이미지가 발행되면 `gitops` 저장소의 Renovate가 Compose 이미지
 버전을 올리는 PR을 만듭니다. PR이 병합되면 Portainer polling이 변경을
 배포합니다.
 
@@ -218,8 +222,8 @@ main push
 ```
 
 배포 실패 시에는 `gitops`의 버전 변경 커밋을 revert합니다. 실패한 버전을
-Renovate이 다시 제안하지 않게 하려면 해당 이미지와 버전을
-`renovate.json`의 해당 이미지 `packageRules.allowedVersions`에서 제외합니다.
+Renovate가 다시 제안하지 않게 하려면 `renovate.json`에서 해당
+이미지에 대한 `packageRules.allowedVersions`로 실패한 버전을 제외합니다.
 
 ## 버전 고정
 
@@ -235,3 +239,34 @@ tests/run_tests.sh
 
 이 명령은 reusable workflow를 actionlint로 검사하고 셸 로직을 Bats로
 검증합니다.
+
+## 재실행과 Java 버전 지정
+
+- 정상 발행 완료(태그와 Release 존재): 기존처럼 검사·이미지 발행·Release 생성을 생략합니다.
+- 이미지 발행 후 태그 생성 전 실패: 동일 source SHA의 이미지를 검증하여 재사용합니다.
+- 태그 생성 후 Release 생성 실패: main 실행을 다시 실행하면 빌드는 생략하고 태그가 가리키는 이미지의 revision을 검증한 뒤 Release만 생성합니다. Java와 Python 모두 amd64/arm64 이미지도 각각 검증합니다.
+- 복구 중 이미지 누락 또는 revision 불일치: 실패 처리하며 기존 버전 이미지를 새로 만들거나 덮어쓰지 않습니다.
+- Python 기존 이미지 재사용은 index annotation뿐 아니라 amd64/arm64 실행 이미지 각각의 revision을 검증합니다. SBOM/provenance descriptor는 실행 아키텍처와 구분합니다.
+- `reusable-java-app.yaml`의 선택 입력 `java-version`으로 JDK를 지정할 수 있습니다. convention plugin이나 변수로 버전을 관리하는 경우 사용하세요. 생략하면 기존 Gradle 파일 자동 감지를 사용합니다.
+- Java prepare는 최대 15분, test는 최대 30분, 아키텍처별 Docker 빌드는 최대 45분, manifest 발행은 최대 10분 실행합니다.
+
+
+## 사용자 시나리오
+
+| 사용자 작업 또는 상태 | workflow 동작 | 사용자 후속 조치 |
+| --- | --- | --- |
+| PR 생성·갱신 / main 이외 push | 언어별 검사만 실행, 이미지·Release 발행 안 함 | 검사 실패를 수정 |
+| workflow_dispatch 실행 | 검사만 실행 | 발행 복구는 해당 main push 실행을 재실행 |
+| main에 새 stable 버전 push | 검사 → 이미지 발행 → 정식 Release | 성공 결과 확인 |
+| main에 alpha/beta/rc 버전 push | 검사 → 해당 버전 이미지 → prerelease | 버전 표기 규칙 준수 |
+| 동일 버전의 태그·Release가 이미 존재 | 후속 검사·발행 생략 | 새 코드를 발행하려면 버전 증가 |
+| 이미지 push 후 태그 생성 전 실패 | 같은 커밋이면 기존 이미지 재사용 후 발행 재시도 | 같은 main push 실행 재실행 |
+| 태그 생성 후 Release 생성 실패 | 빌드 생략 → 기존 이미지 검증 → Release만 복구 | 같은 main push 실행 재실행 |
+| 복구 대상 이미지 누락 또는 다른 revision | 실패, 기존 버전 재빌드·덮어쓰기 안 함 | 원인 확인 후 복구 또는 새 버전 발행 |
+| 기존 Python 이미지에 ARM64 누락 / 하위 이미지 SHA 불일치 | 재사용과 Release 발행 차단 | 올바른 멀티아키텍처 이미지로 문제 해결 |
+| Java 버전이 convention plugin에만 있음 | java-version 입력으로 JDK 지정 가능 | 호출 with.java-version 설정 |
+| Gradle properties가 버전 출력 후 실패 | prepare 실패, 발행 중단 | Gradle 오류 수정 |
+| build 실패 또는 실행 취소 | Docker·Release 후속 발행 차단 | 실패 원인 해결 후 재실행 |
+
+워크플로우 파일 수정이 호출 저장소에 적용되기 전 실행을 재실행하면 이전 workflow 정의가 사용될 수 있습니다.
+변경된 공통 workflow가 적용된 main push 실행을 기준으로 복구를 수행하세요.

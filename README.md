@@ -12,7 +12,8 @@ See [the shared workflow guide](docs/shared-workflows.md) and `examples/` for
 inputs, secrets, and caller configurations.
 
 Pull requests run application tests. Main pushes publish immutable versioned
-images and releases only when the application's version tag does not exist.
+images and releases for new version tags. If a tag exists without a release,
+CI verifies the existing image and recovers the missing release without rebuilding.
 The application repository remains the checkout and image/release owner.
 
 `Validate Workflows` runs actionlint and the existing Bats contract tests on
@@ -392,3 +393,43 @@ docker service ps --no-trunc portainer_agent
 
 Syntax validation does not prove NFS availability, registry authentication,
 service readiness, or cross-node overlay connectivity.
+
+## 후속 작업: DEV·STG·PRD 환경 분리
+
+환경 분리는 추후 진행하며, 현재는 환경별 배포·승인·승격 workflow를 추가하지
+않습니다. 공통 CI는 테스트·버전 이미지 발행·GitHub Release 생성을 유지하고,
+실제 배포는 Renovate의 이미지 변경 PR과 Portainer GitOps 업데이트로 수행합니다.
+아래 항목은 아직 구현되지 않은 후속 작업입니다.
+
+- [ ] GitOps의 애플리케이션 Compose를 DEV·STG·PRD별로 분리합니다.
+  예: `platform/dev/docker-compose.yml`, `platform/stg/docker-compose.yml`,
+  `platform/prd/docker-compose.yml`. 환경별 프로필, Secret 참조, 네트워크,
+  볼륨, 외부 포트와 배포 대상을 정하고 공용 인프라의 분리 범위도 확인합니다.
+- [ ] Renovate의 전체 Compose minor·patch 자동 병합 정책을 환경별로 조정합니다.
+  애플리케이션 DEV는 새 이미지 업데이트 PR을 받고, STG·PRD는 독립적인 최신
+  버전 업데이트를 비활성화하여 검증된 이미지의 승격 PR로만 변경합니다.
+  공용 인프라 및 GitHub Actions 의존성 정책은 별도로 관리합니다.
+- [ ] Portainer에 환경별 스택을 구성하고 각 Git 브랜치·Compose 경로·배포 대상을
+  연결합니다. 예: `platform-dev`, `platform-stg`, `platform-prd`가 `main`의
+  각 환경 경로를 참조합니다. 설치된 Portainer의 기능과 polling 설정을 확인합니다.
+- [ ] DEV 배포 후 검증한 이미지 참조만 STG로, STG 검증 후 PRD로 복사하는
+  승격 PR 절차를 마련합니다. 이미지를 재빌드하거나 환경별로 재태깅하지 않고,
+  같은 산출물임을 보장하도록 이미지 digest 고정도 적용합니다.
+- [ ] PRD 변경 PR에 필수 리뷰·필수 검사를 강제하는 저장소 보호 규칙을 설정합니다.
+  승인 후 병합된 Compose 변경을 Portainer가 배포하도록 합니다.
+- [ ] Compose 검증에 모든 환경 경로를 포함하고, 실제 배포 후 상태 확인 및
+  smoke test 기준을 마련합니다. CI의 Compose 검사 통과만으로 배포 성공을
+  판단하지 않습니다.
+- [ ] 초기에는 수동 승격 PR로 운영하고, 필요해지면 배포 검증 결과를 확인해 다음
+  환경의 이미지 참조만 변경하는 승격 workflow를 추가합니다. Renovate 설정만으로
+  DEV → STG → PRD 검증 순서가 보장되지는 않습니다.
+- [ ] 환경별 이전 이미지 참조로 되돌리는 롤백 절차와 실패 버전 재제안 방지 정책을
+  확인합니다.
+
+예정된 흐름:
+
+```text
+CI 이미지 발행 → Renovate DEV PR → 병합 → Portainer DEV 배포·검증
+  → STG 승격 PR → 병합 → Portainer STG 배포·검증
+  → PRD 승격 PR → 승인·병합 → Portainer PRD 배포·검증
+```

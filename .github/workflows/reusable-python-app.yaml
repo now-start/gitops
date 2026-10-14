@@ -13,7 +13,7 @@ on:
         required: true
 
 concurrency:
-  group: ${{ github.repository }}-root-${{ github.event_name }}-${{ github.ref }}-release
+  group: ${{ github.repository }}-python-root-${{ github.event_name }}-${{ github.ref }}-release
   cancel-in-progress: false
 
 permissions:
@@ -38,7 +38,12 @@ jobs:
       uv-version: ${{ inputs.uv-version }}
 
   docker:
-    if: needs.prepare.outputs.tag-exists == 'false'
+    # A tagged version may verify its existing image to recover a missing release.
+    if: >-
+      ${{ !cancelled() && needs.prepare.result == 'success' &&
+          needs.prepare.outputs.release-exists == 'false' &&
+          (needs.build.result == 'success' ||
+           (needs.prepare.outputs.tag-exists == 'true' && needs.build.result == 'skipped')) }}
     needs: [prepare, build]
     permissions:
       contents: read
@@ -53,7 +58,9 @@ jobs:
       registry-password: ${{ secrets.registry-password }}
 
   release:
-    if: needs.prepare.outputs.tag-exists == 'false'
+    if: >-
+      ${{ !cancelled() && needs.prepare.result == 'success' &&
+          needs.docker.result == 'success' && needs.prepare.outputs.release-exists == 'false' }}
     needs: [prepare, docker]
     permissions:
       contents: write
