@@ -1,15 +1,16 @@
 services:
   barosteel:
+    # Publish an image containing this change before deployment.
     image: ghcr.io/now-start/barosteel:0.1.18
     user: root
     environment:
       TZ: Asia/Seoul
       SPRING_CONFIG_IMPORT: configserver:http://config:8888
-    networks:
-      - platform_default
-      - grafana_default
+    networks: [default, platform_default, grafana_default]
     deploy:
+      mode: replicated
       replicas: 1
+      endpoint_mode: vip
       update_config:
         parallelism: 1
         order: stop-first
@@ -25,6 +26,10 @@ services:
         delay: 5s
 
 networks:
+  default:
+    driver: overlay
+    driver_opts:
+      com.docker.network.driver.mtu: "1200"
   platform_default:
     external: true
   grafana_default:
