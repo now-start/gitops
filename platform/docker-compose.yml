@@ -43,7 +43,7 @@ services:
 
   eureka:
     <<: *service-defaults
-    image: ghcr.io/now-start/eureka:2.5.1
+    image: ghcr.io/now-start/eureka:2.5.2
     deploy:
       <<: *global-deploy-defaults
 
