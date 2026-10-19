@@ -1,7 +1,7 @@
 services:
   barosteel:
     # Publish an image containing this change before deployment.
-    image: ghcr.io/now-start/barosteel:0.1.20
+    image: ghcr.io/now-start/barosteel:0.1.21
     user: root
     environment:
       TZ: Asia/Seoul
