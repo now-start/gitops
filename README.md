@@ -94,10 +94,42 @@ drain 상태로 전환하면 `coin`은 다른 노드로 장애 조치할 수 없
 상태 검사(healthcheck)는 이미지에 검증된 검사 도구가 있을 때만 활성화합니다.
 Vaultwarden과 Grafana는 내장 스크립트, Flame은 Node.js,
 Redis는 인증된 `PING`을 사용합니다.
-Spring 빌드팩 이미지에는 셸이 없고 현재 상태 검사 프로세스도 포함되어 있지 않으므로,
-`platform`, `chzzk`, `evergreen`, `barosteel`에 셸 기반 검사를 추가하면 안 됩니다.
-Swarm에서 Actuator 생존 상태 검사를 활성화하려면 먼저 이미지 빌드 시
-Paketo health-checker를 포함해야 합니다.
+Spring 빌드팩 기본 Tiny 이미지에는 셸이 없으므로 셸 기반 검사를 사용하지 않습니다.
+`barosteel`, `platform`의 config/eureka/admin/gateway, `chzzk`의 냥냥봇,
+`evergreen`의 lotto는 Paketo health-checker를 포함한 새 이미지로 교체한 뒤 검사합니다.
+Lotto는 브라우저 실행에 필요한 Playwright run image를 유지합니다.
+Python으로 작성된 `evergreen`의 coin은 Spring 빌드팩 적용 대상이 아닙니다.
+
+포트 8081과 `/actuator/health/liveness`는 각 저장소의 루트 `bootBuildImage` 설정에
+`BPE_DEFAULT_THC_PORT`와 `BPE_DEFAULT_THC_PATH`로 포함합니다.
+GitOps는 `/cnb/lifecycle/launcher -- /workspace/health-check`로 이미지 기본값을 적용하며 셸을 사용하지 않습니다.
+필요한 경우 배포 환경의 `THC_PORT`, `THC_PATH`로 기본값을 덮어쓸 수 있습니다.
+Spring Boot Admin용 Actuator HTTP/JMX 전체 노출 및 접근 허용, probes와 info 항목은 Platform의 공통 설정에서 관리합니다.
+
+프로젝트 패치 버전 변경을 main에 반영하면 CI가 이미지를 발행하고, Renovate가 이 저장소의 이미지 태그를 갱신합니다.
+Config Server 공통 설정과 새 이미지가 먼저 반영되고 Renovate의 태그 갱신이 적용된 뒤 배포해야 합니다.
+현재 선언된 기존 태그가 이 변경을 포함한다는 뜻이 아니며, 그 전에는 변경된 Compose를 배포하지 마세요.
+
+## 공통 업데이트·롤백·재시작 정책
+
+상시 서비스와 `_template`은 아래 값을 동일하게 사용한다. 운영 기동 시간을 측정한 최적값이 아닌 공통 시작 기준이다.
+
+| 항목 | 공통값 | 의미 |
+| --- | --- | --- |
+| healthcheck | 30초 간격 / 5초 제한 / 연속 3회 실패 / 시작 유예 120초 | 검증된 검사 도구가 있는 서비스에 적용 |
+| update_config | parallelism 1 / stop-first / failure_action rollback / monitor 5m | 한 개씩 교체, 실패 시 이전 서비스 설정으로 복귀 |
+| rollback_config | parallelism 1 / stop-first / failure_action pause / monitor 5m | 복구도 한 개씩, 복구 실패 시 진행 중단 |
+| restart_policy | condition any / delay 5s | 상시 서비스는 정상 종료·실패 후 다시 실행, 횟수 제한 없음 |
+
+- `stop-first`는 공유 데이터·호스트 포트·단일 실행 작업의 중첩을 방지하는 공통값이다. replica 1개에서는 배포와 롤백 중 중단이 발생한다. `start-first`는 구·신 버전의 동시 실행과 자원 여유, 트래픽 전환을 별도로 검증해야 하므로 공통값으로 쓰지 않는다.
+- 시작 유예는 실패 횟수만 유예하며, 그 안에 첫 성공이 발생하면 이후 실패는 집계된다. 정상 운영 중 장애 감지는 대략 60~105초 걸릴 수 있다. 120초 유예와 세 번의 검사 시간을 고려해 감시 시간을 5분으로 둔다. `monitor`는 readiness 확인이나 트래픽 전환을 보장하지 않는다.
+- 새 버전 태스크가 업데이트 감시 중 실패하면 롤백한다. 감시가 끝난 뒤 발생한 장애는 재시작 정책의 대상이며 항상 자동 롤백되는 것은 아니다. 롤백도 실패하면 롤백 진행이 멈추고 운영자 확인이 필요하다.
+- 서비스 설정 롤백은 DB 마이그레이션·볼륨·외부 시스템 변경을 되돌리지 않는다. 데이터 형식이 바뀌는 업그레이드는 이전 이미지와의 호환성을 확인해야 한다.
+- 헬스체크가 없는 서비스는 실행 중 응답 불능을 이 설정만으로 감지할 수 없다. CockroachDB는 초기 클러스터 탐색 교착을 피하기 위해 readiness 검사를 Docker healthcheck에 연결하지 않는다.
+- CockroachDB `init`은 일회성 작업이므로 성공 후 종료하는 `on-failure`와 재시도 지연 10초를 유지한다. 상시 서비스 공통값의 대상이 아니다.
+- 상시 서비스 재시작에 횟수 제한이 없으므로 반복 실패는 별도 모니터링이 필요하다. 재시작만으로 설정 오류가 해결되지는 않는다.
+
+기준: [Docker 배포 설정](https://docs.docker.com/reference/compose-file/deploy/), [Docker HEALTHCHECK](https://docs.docker.com/reference/dockerfile/#healthcheck).
 
 ## Portainer GitOps
 

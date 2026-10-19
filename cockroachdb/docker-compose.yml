@@ -69,12 +69,12 @@ services:
         parallelism: 1
         order: stop-first
         failure_action: rollback
-        monitor: 3m
+        monitor: 5m
       rollback_config:
         parallelism: 1
         order: stop-first
         failure_action: pause
-        monitor: 3m
+        monitor: 5m
       restart_policy:
         condition: any
         delay: 5s
@@ -254,9 +254,19 @@ services:
       placement:
         constraints:
           - node.role == manager
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+        monitor: 5m
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: pause
+        monitor: 5m
       restart_policy:
         condition: any
-        delay: 30s
+        delay: 5s
 
 networks:
   default:

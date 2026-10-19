@@ -16,19 +16,19 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 60s
+      start_period: 120s
     deploy:
       replicas: 1
       update_config:
         parallelism: 1
         order: stop-first
         failure_action: rollback
-        monitor: 3m
+        monitor: 5m
       rollback_config:
         parallelism: 1
         order: stop-first
         failure_action: pause
-        monitor: 3m
+        monitor: 5m
       restart_policy:
         condition: any
         delay: 5s
