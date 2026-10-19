@@ -64,7 +64,7 @@ services:
 
   gateway:
     <<: *service-defaults
-    image: ghcr.io/now-start/gateway:6.1.5
+    image: ghcr.io/now-start/gateway:6.1.6
     deploy:
       <<: *global-deploy-defaults
     ports:
