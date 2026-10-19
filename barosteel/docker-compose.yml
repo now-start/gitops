@@ -16,7 +16,7 @@ services:
       start_period: 120s
     deploy:
       mode: replicated
-      replicas: 1
+      replicas: 2
       endpoint_mode: vip
       update_config:
         parallelism: 1

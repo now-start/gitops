@@ -57,6 +57,10 @@ services:
   admin:
     <<: *service-defaults
     image: ghcr.io/now-start/admin:2.11.10
+    environment:
+      TZ: Asia/Seoul
+      JAVA_TOOL_OPTIONS: -XX:MaxDirectMemorySize=256m
+      SPRING_CONFIG_IMPORT: configserver:http://config:8888
 
   gateway:
     <<: *service-defaults
