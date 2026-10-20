@@ -56,7 +56,7 @@ services:
 
   admin:
     <<: *service-defaults
-    image: ghcr.io/now-start/admin:2.11.11
+    image: ghcr.io/now-start/admin:2.11.12
     deploy:
       <<: *global-deploy-defaults
     environment:
