@@ -10,7 +10,7 @@ services:
       # Use an executable verified in the image; CMD does not require a shell.
       test: ["CMD", "REPLACE_HEALTHCHECK_EXECUTABLE"]
       interval: 30s
-      timeout: 5s
+      timeout: 30s
       retries: 3
       start_period: 120s
     deploy:
