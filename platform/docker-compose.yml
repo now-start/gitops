@@ -19,15 +19,16 @@ x-global-deploy-defaults: &global-deploy-defaults
 
 x-service-defaults: &service-defaults
   user: root
-  # Publish images with Paketo health-checker and common probes before deployment.
   healthcheck:
-    test: ["CMD", "/cnb/lifecycle/launcher", "--", "/workspace/health-check"]
+    test: ["CMD", "/workspace/health-check"]
     interval: 30s
     timeout: 30s
     retries: 3
     start_period: 120s
   environment:
     TZ: Asia/Seoul
+    THC_PORT: "8081"
+    THC_PATH: /actuator/health/liveness
     SPRING_CONFIG_IMPORT: configserver:http://config:8888
   networks:
     - default
@@ -45,6 +46,8 @@ services:
       <<: *global-deploy-defaults
     environment:
       TZ: Asia/Seoul
+      THC_PORT: "8081"
+      THC_PATH: /actuator/health/liveness
       ENCRYPT_KEY: ${SPRING_ENCRYPT_KEY:-}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
 
@@ -61,6 +64,10 @@ services:
       <<: *global-deploy-defaults
     environment:
       TZ: Asia/Seoul
+      THC_PORT: "8081"
+      THC_PATH: /actuator/health/liveness
+      ADMIN_CLUSTER_BIND_HOST: platform_config.platform_default
+      ADMIN_CLUSTER_MEMBERS: tasks.platform_admin.platform_default
       JAVA_TOOL_OPTIONS: -XX:MaxDirectMemorySize=256m
       SPRING_CONFIG_IMPORT: configserver:http://config:8888
 
@@ -76,6 +83,8 @@ services:
         mode: ingress
     environment:
       TZ: Asia/Seoul
+      THC_PORT: "8081"
+      THC_PATH: /actuator/health/liveness
       JAVA_TOOL_OPTIONS: -XX:MaxDirectMemorySize=256m
       SPRING_CONFIG_IMPORT: configserver:http://config:8888
 

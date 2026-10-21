@@ -62,9 +62,9 @@ actionlint와 기존 Bats 계약 테스트를 실행합니다. 로컬에서도
 검사 도구가 없는 스택도 상태 검사 없이 동일한 배포 정책을 사용합니다.
 
 대부분의 서비스는 복제 태스크 하나를 실행합니다. `platform` 스택의
-`config`, `eureka`, `gateway`는 global 모드를 사용하므로,
+`config`, `eureka`, `admin`, `gateway`는 global 모드를 사용하므로,
 Swarm이 멀티플랫폼 이미지를 이용해 배치 가능한 모든 노드에 태스크를 하나씩 실행합니다.
-`admin`은 단일 복제본을 유지합니다.
+`admin`은 Hazelcast로 인스턴스 이벤트를 공유합니다.
 
 Eureka 2.5.0은 공유 오버레이 네트워크의 `tasks.platform_eureka`를 통해 개별 피어를
 발견하고 10초마다 복제 대상 피어를 갱신합니다. 배치 가능한 노드를 추가해도
@@ -100,15 +100,18 @@ Spring 빌드팩 기본 Tiny 이미지에는 셸이 없으므로 셸 기반 검�
 Lotto는 브라우저 실행에 필요한 Playwright run image를 유지합니다.
 Python으로 작성된 `evergreen`의 coin은 Spring 빌드팩 적용 대상이 아닙니다.
 
-포트 8081과 `/actuator/health/liveness`는 각 저장소의 루트 `bootBuildImage` 설정에
-`BPE_DEFAULT_THC_PORT`와 `BPE_DEFAULT_THC_PATH`로 포함합니다.
-GitOps는 `/cnb/lifecycle/launcher -- /workspace/health-check`로 이미지 기본값을 적용하며 셸을 사용하지 않습니다.
-필요한 경우 배포 환경의 `THC_PORT`, `THC_PATH`로 기본값을 덮어쓸 수 있습니다.
+검사 포트 8081과 `/actuator/health/liveness` 경로는 각 Spring 서비스의 Compose 환경 변수 `THC_PORT`, `THC_PATH`로 지정합니다.
+GitOps는 `/workspace/health-check`를 직접 실행해 검사 때마다 launcher의 JVM 메모리 계산·인증서 초기화가 반복되지 않도록 합니다. Gradle은 health-checker 빌드팩과 `BP_HEALTH_CHECKER_ENABLED=true`만 유지하며, `BPE_DEFAULT_THC_PORT`·`BPE_DEFAULT_THC_PATH` 기본값은 제거합니다.
+검사 대상 변경은 배포 환경의 `THC_PORT`, `THC_PATH`에서 관리합니다.
 Spring Boot Admin용 Actuator HTTP/JMX 전체 노출 및 접근 허용, probes와 info 항목은 Platform의 공통 설정에서 관리합니다.
 
 프로젝트 패치 버전 변경을 main에 반영하면 CI가 이미지를 발행하고, Renovate가 이 저장소의 이미지 태그를 갱신합니다.
 Config Server 공통 설정과 새 이미지가 먼저 반영되고 Renovate의 태그 갱신이 적용된 뒤 배포해야 합니다.
 현재 선언된 기존 태그가 이 변경을 포함한다는 뜻이 아니며, 그 전에는 변경된 Compose를 배포하지 마세요.
+
+Admin은 `ADMIN_CLUSTER_BIND_HOST=platform_config.platform_default`로 클러스터 통신용 로컬 주소를 선택하고, `ADMIN_CLUSTER_MEMBERS=tasks.platform_admin.platform_default`로 피어를 탐색합니다. 네트워크 이름을 명시해 두 오버레이 중 다른 주소를 선택하는 것을 방지합니다. 아직 healthy한 admin 태스크가 없어도 먼저 기동할 수 있도록 주소 선택과 피어 DNS를 분리했으며, admin 2.11.15 이상이 필요합니다.
+
+Lotto는 Backup에서 실제 기동에 약 176초가 걸린 사례에 맞춰 시작 유예만 300초로 늘립니다. 직접 검사 방식과 검사 간격 30초·제한 30초·연속 실패 3회, 업데이트·롤백 감시 5분은 유지합니다. 시작 유예 중 계속 실패하면 unhealthy 판정이 업데이트 감시 종료 이후에 발생할 수 있습니다.
 
 ## 공통 업데이트·롤백·재시작 정책
 

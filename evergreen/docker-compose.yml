@@ -26,13 +26,17 @@ services:
   lotto:
     <<: *service-defaults
     image: ghcr.io/now-start/lotto-service:9.4.3
-    # Requires a new image with embedded health-checker defaults and common probes.
+    environment:
+      TZ: Asia/Seoul
+      SPRING_CONFIG_IMPORT: configserver:http://config:8888
+      THC_PORT: "8081"
+      THC_PATH: /actuator/health/liveness
     healthcheck:
-      test: ["CMD", "/cnb/lifecycle/launcher", "--", "/workspace/health-check"]
+      test: ["CMD", "/workspace/health-check"]
       interval: 30s
       timeout: 30s
       retries: 3
-      start_period: 120s
+      start_period: 300s
 
   coin:
     <<: *service-defaults
