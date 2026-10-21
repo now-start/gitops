@@ -1,6 +1,6 @@
 services:
   barosteel:
-    image: ghcr.io/now-start/barosteel:0.2.1
+    image: ghcr.io/now-start/barosteel:0.2.4
     user: root
     stop_grace_period: 120s
     environment:
