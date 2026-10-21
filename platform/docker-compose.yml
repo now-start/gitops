@@ -59,6 +59,7 @@ services:
 
   admin:
     <<: *service-defaults
+    stop_grace_period: 120s
     image: ghcr.io/now-start/admin:2.11.16
     deploy:
       <<: *global-deploy-defaults
@@ -66,8 +67,6 @@ services:
       TZ: Asia/Seoul
       THC_PORT: "8081"
       THC_PATH: /actuator/health/liveness
-      ADMIN_CLUSTER_BIND_HOST: platform_config.platform_default
-      ADMIN_CLUSTER_MEMBERS: tasks.platform_admin.platform_default
       JAVA_TOOL_OPTIONS: -XX:MaxDirectMemorySize=256m
       SPRING_CONFIG_IMPORT: configserver:http://config:8888
 
@@ -91,6 +90,9 @@ services:
 networks:
   default:
     driver: overlay
+    ipam:
+      config:
+        - subnet: 10.0.11.0/24
     driver_opts:
       com.docker.network.driver.mtu: "1200"
   grafana_default:

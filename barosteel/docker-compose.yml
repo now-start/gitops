@@ -2,6 +2,7 @@ services:
   barosteel:
     image: ghcr.io/now-start/barosteel:0.2.1
     user: root
+    stop_grace_period: 120s
     environment:
       TZ: Asia/Seoul
       THC_PORT: "8081"
@@ -35,6 +36,9 @@ services:
 networks:
   default:
     driver: overlay
+    ipam:
+      config:
+        - subnet: 10.0.3.0/24
     driver_opts:
       com.docker.network.driver.mtu: "1200"
   platform_default:
