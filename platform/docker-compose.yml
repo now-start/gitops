@@ -17,7 +17,7 @@ x-healthcheck-defaults: &healthcheck-defaults
   interval: 30s
   timeout: 30s
   retries: 3
-  start_period: 120s
+  start_period: 5m
 
 x-global-deploy-defaults: &global-deploy-defaults
   <<: *deploy-defaults
@@ -25,7 +25,7 @@ x-global-deploy-defaults: &global-deploy-defaults
 
 x-service-defaults: &service-defaults
   user: root
-  stop_grace_period: 120s
+  stop_grace_period: 5m
   healthcheck:
     <<: *healthcheck-defaults
     test: ["CMD", "/workspace/health-check"]

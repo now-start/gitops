@@ -17,10 +17,10 @@ x-healthcheck-defaults: &healthcheck-defaults
   interval: 30s
   timeout: 30s
   retries: 3
-  start_period: 120s
+  start_period: 5m
 
 x-service-defaults: &service-defaults
-  stop_grace_period: 120s
+  stop_grace_period: 5m
 
 services:
   nyang-nyang-bot:

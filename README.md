@@ -50,7 +50,7 @@ NFS 기본값은 `100.100.1.1:/volume1/docker/app`이며, `app`은 서비스별�
 외부 네트워크와 사용자 권한은 서비스에 맞게 지정합니다.
 복사·수정·검증 방법과 선택 항목은 [템플릿 안내](_template/README.md)를 참고하세요.
 
-공통 정책은 상태 검사 시작 유예 시간 120초, 업데이트·롤백 감시 시간 5분,
+공통 정책은 상태 검사 시작 유예 시간 5분, 업데이트·롤백 감시 시간 5분,
 업데이트 실패 시 자동 롤백, 재시작 조건 `any`를 사용합니다.
 상태 검사 명령만 서비스별로 다르게 지정합니다. 이미지에 사용할 수 있는
 검사 도구가 없는 스택도 상태 검사 없이 동일한 배포 정책을 사용합니다.
@@ -64,9 +64,9 @@ YAML은 Prettier 3.6.2 기본 형식과 LF 줄바꿈을 사용합니다.
 npx --yes prettier@3.6.2 --check '**/*.{yaml,yml}' '.github/**/*.yaml'
 ```
 
-모든 서비스와 새 스택 템플릿의 종료 유예시간은 `stop_grace_period: 120s`입니다.
+모든 서비스와 새 스택 템플릿의 종료 유예시간은 `stop_grace_period: 5m`입니다.
 이 값은 `deploy`가 아닌 서비스 수준에 선언하며, 모든 스택은
-파일별 `x-service-defaults`에서 상속합니다. 정상 종료를 최대 120초
+파일별 `x-service-defaults`에서 상속합니다. 정상 종료를 최대 5분
 기다린 뒤 강제 종료하며, 프로세스가 먼저 종료되면 즉시 다음 단계로 진행합니다.
 
 대부분의 서비스는 복제 태스크 하나를 실행합니다. `platform` 스택의
@@ -118,7 +118,7 @@ Config Server 공통 설정과 새 이미지가 먼저 반영되고 Renovate의 
 
 Admin은 `ADMIN_CLUSTER_BIND_HOST=platform_config.platform_default`로 클러스터 통신용 로컬 주소를 선택하고, `ADMIN_CLUSTER_MEMBERS=tasks.platform_admin.platform_default`로 피어를 탐색합니다. 네트워크 이름을 명시해 두 오버레이 중 다른 주소를 선택하는 것을 방지합니다. 아직 healthy한 admin 태스크가 없어도 먼저 기동할 수 있도록 주소 선택과 피어 DNS를 분리했으며, admin 2.11.15 이상이 필요합니다.
 
-Lotto는 Backup에서 실제 기동에 약 176초가 걸린 사례에 맞춰 시작 유예만 300초로 늘립니다. 직접 검사 방식과 검사 간격 30초·제한 30초·연속 실패 3회, 업데이트·롤백 감시 5분은 유지합니다. 시작 유예 중 계속 실패하면 unhealthy 판정이 업데이트 감시 종료 이후에 발생할 수 있습니다.
+Lotto도 공통 시작 유예 5분을 상속합니다. 직접 검사 방식과 검사 간격 30초·제한 30초·연속 실패 3회, 업데이트·롤백 감시 5분은 유지합니다. 시작 유예 중 계속 실패하면 unhealthy 판정이 업데이트 감시 종료 이후에 발생할 수 있습니다.
 
 ## 공통 업데이트·롤백·재시작 정책
 
@@ -126,7 +126,7 @@ Lotto는 Backup에서 실제 기동에 약 176초가 걸린 사례에 맞춰 시
 
 | 항목 | 공통값 | 의미 |
 | --- | --- | --- |
-| healthcheck | 30초 간격 / 30초 제한 / 연속 3회 실패 / 시작 유예 120초 | 검증된 검사 도구가 있는 서비스에 적용 |
+| healthcheck | 30초 간격 / 30초 제한 / 연속 3회 실패 / 시작 유예 5분 | 검증된 검사 도구가 있는 서비스에 적용 |
 | update_config | parallelism 1 / stop-first / failure_action rollback / monitor 5m | 한 개씩 교체, 실패 시 이전 서비스 설정으로 복귀 |
 | rollback_config | parallelism 1 / stop-first / failure_action pause / monitor 5m | 복구도 한 개씩, 복구 실패 시 진행 중단 |
 | restart_policy | condition any / delay 5s | 상시 서비스는 정상 종료·실패 후 다시 실행, 횟수 제한 없음 |

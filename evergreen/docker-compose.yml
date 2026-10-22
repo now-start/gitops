@@ -17,10 +17,10 @@ x-healthcheck-defaults: &healthcheck-defaults
   interval: 30s
   timeout: 30s
   retries: 3
-  start_period: 120s
+  start_period: 5m
 
 x-service-defaults: &service-defaults
-  stop_grace_period: 120s
+  stop_grace_period: 5m
   user: root
   environment: &environment-defaults
     TZ: Asia/Seoul
@@ -45,8 +45,6 @@ services:
     healthcheck:
       <<: *healthcheck-defaults
       test: ["CMD", "/workspace/health-check"]
-      # Lotto는 기동 시간이 길어 시작 유예를 300초로 지정합니다.
-      start_period: 300s
 
   coin:
     <<: *service-defaults
