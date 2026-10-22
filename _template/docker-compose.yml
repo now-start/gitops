@@ -33,9 +33,10 @@ services:
     #     protocol: tcp
     #     mode: ingress
     # environment:
+    #   TZ: Asia/Seoul
     #   APP_SECRET: ${APP_SECRET:-}
-    # volumes:
-    #   - app_data:/data
+    volumes:
+      - app_data:/data
     # Enable only after choosing a command available in this image.
     # healthcheck:
     #   <<: *healthcheck-defaults
@@ -49,7 +50,13 @@ services:
 networks:
   default:
     driver: overlay
-# Optional node-local storage. Choose a shared volume driver when needed.
-# volumes:
-#   app_data:
-#     driver: local
+    driver_opts:
+      com.docker.network.driver.mtu: "1200"
+
+volumes:
+  app_data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=REPLACE_NFS_SERVER,vers=4,hard
+      device: :/REPLACE_NFS_EXPORT_PATH
