@@ -26,7 +26,7 @@ services:
   app:
     <<: *service-defaults
     image: REPLACE_IMAGE:0.0.0
-    # Add only the settings this service needs.
+    # 서비스에 필요한 설정만 주석을 해제해 사용합니다.
     # ports:
     #   - target: 8080
     #     published: 8080
@@ -34,18 +34,22 @@ services:
     #     mode: ingress
     # environment:
     #   TZ: Asia/Seoul
+    #   # Spring/Paketo 상태 검사 환경변수
+    #   THC_PORT: "8081"
+    #   THC_PATH: /actuator/health/readiness
     #   APP_SECRET: ${APP_SECRET:-}
     volumes:
       - app_data:/data
-    # Enable only after choosing a command available in this image.
+    # 상태 검사 명령을 제공하는 모든 이미지에서 활성화할 수 있습니다.
+    # 이미지가 지원하는 검사 명령을 사용합니다. 아래는 Spring/Paketo 예제입니다.
     # healthcheck:
     #   <<: *healthcheck-defaults
-    #   test: ["CMD", "REPLACE_HEALTHCHECK_EXECUTABLE"]
+    #   test: ["CMD", "/workspace/health-check"]
     deploy:
       <<: *deploy-defaults
       mode: replicated
       replicas: 1
-      # For one task per node: use mode: global and remove replicas.
+      # 노드마다 하나씩 실행하려면 mode: global로 변경하고 replicas를 제거합니다.
 
 networks:
   default:
@@ -58,5 +62,5 @@ volumes:
     driver: local
     driver_opts:
       type: nfs
-      o: addr=REPLACE_NFS_SERVER,vers=4,hard
-      device: :/REPLACE_NFS_EXPORT_PATH
+      o: addr=100.100.1.1,vers=4,hard
+      device: :/volume1/docker/app

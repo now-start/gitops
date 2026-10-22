@@ -1,12 +1,36 @@
+x-deploy-defaults: &deploy-defaults
+  update_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: rollback
+    monitor: 5m
+  rollback_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: pause
+    monitor: 5m
+  restart_policy:
+    condition: any
+    delay: 5s
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 30s
+  retries: 3
+  start_period: 120s
+
+x-service-defaults: &service-defaults
+  stop_grace_period: 120s
+
 services:
   nyang-nyang-bot:
     image: ghcr.io/now-start/nyang-nyang-bot:5.9.11
     user: root
-    stop_grace_period: 120s
+    <<: *service-defaults
     environment:
       TZ: Asia/Seoul
       THC_PORT: "8081"
-      THC_PATH: /actuator/health/liveness
+      THC_PATH: /actuator/health/readiness
       SPRING_CONFIG_IMPORT: configserver:http://config:8888
     volumes:
       - chzzk_data:/workspace/key
@@ -14,26 +38,11 @@ services:
       - platform_default
       - grafana_default
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "/workspace/health-check"]
-      interval: 30s
-      timeout: 30s
-      retries: 3
-      start_period: 120s
     deploy:
+      <<: *deploy-defaults
       replicas: 1
-      update_config:
-        parallelism: 1
-        order: stop-first
-        failure_action: rollback
-        monitor: 5m
-      rollback_config:
-        parallelism: 1
-        order: stop-first
-        failure_action: pause
-        monitor: 5m
-      restart_policy:
-        condition: any
-        delay: 5s
 
 volumes:
   chzzk_data:

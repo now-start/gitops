@@ -13,6 +13,15 @@ x-deploy-defaults: &deploy-defaults
     condition: any
     delay: 5s
 
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 30s
+  retries: 3
+  start_period: 120s
+
+x-service-defaults: &service-defaults
+  stop_grace_period: 120s
+
 services:
   cockroachdb:
     image: cockroachdb/cockroach:v24.3.37
@@ -74,7 +83,7 @@ services:
         mode: host
     volumes:
       - cockroachdb_data:/data
-    stop_grace_period: 120s
+    <<: *service-defaults
     # Intentionally no healthcheck: readiness probes deadlock Swarm service
     # discovery before cluster initialization.
     deploy:
@@ -83,7 +92,7 @@ services:
       endpoint_mode: dnsrr
 
   init:
-    stop_grace_period: 120s
+    <<: *service-defaults
     image: cockroachdb/cockroach:v24.3.37
     entrypoint: ["/bin/sh", "-ec"]
     command:
@@ -115,7 +124,7 @@ services:
       replicas: 1
 
   decommissioner:
-    stop_grace_period: 120s
+    <<: *service-defaults
     image: docker:29.9.2-cli
     entrypoint: ["/bin/sh", "-ec"]
     command:

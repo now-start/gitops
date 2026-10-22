@@ -1,15 +1,15 @@
 # 범용 Docker Swarm 스택 템플릿
 
 오버레이 네트워크와 NFS 공유 볼륨을 사용하는 장기 실행 서비스용 기본형입니다.
-특정 애플리케이션이나 서버 주소는 고정하지 않습니다.
+NFS 서버 기본값은 `100.100.1.1`, 공유 경로 예제는 `/volume1/docker/app`입니다.
 `docker stack deploy`용이며 Kubernetes나 일반 Compose의 동작까지 보장하는 템플릿은 아닙니다.
 
 ## 사용 방법
 
 1. 이 디렉터리를 새 스택 디렉터리로 복사합니다.
 2. `app`을 서비스 이름으로, `REPLACE_IMAGE:0.0.0`을 고정 버전 이미지로 바꿉니다.
-3. `REPLACE_NFS_SERVER`와 `REPLACE_NFS_EXPORT_PATH`를 NFS 서버 주소와 서버가 제공하는 공유 경로로 바꿉니다. 저장소가 필요 없으면 서비스의 `volumes`와 최상위 `volumes`를 함께 제거합니다.
-4. 필요한 포트·환경변수·상태 검사 항목만 주석을 해제합니다. 시간대가 필요하면 `TZ: Asia/Seoul` 예제를 사용합니다.
+3. NFS 기본값 `100.100.1.1:/volume1/docker/app`에서 `app`을 해당 서비스의 공유 디렉터리로 바꿉니다. 저장소가 필요 없으면 서비스의 `volumes`와 최상위 `volumes`를 함께 제거합니다.
+4. 필요한 포트·환경변수·상태 검사 항목만 주석을 해제합니다. 시간대가 필요하면 `TZ: Asia/Seoul` 예제를 사용합니다. Spring/Paketo 이미지에서는 `THC_PORT: "8081"`, `THC_PATH: /actuator/health/readiness`와 `/workspace/health-check` 예제를 함께 활성화합니다.
 5. `replicas`를 지정하거나, 노드마다 실행하려면 `mode: global`로 바꾸고 `replicas`를 제거합니다.
 6. `docker stack config -c <stack>/docker-compose.yml`로 검증한 뒤 배포합니다.
 
@@ -40,3 +40,5 @@ NFS 공유 경로는 태스크가 배치될 모든 노드에서 접근 가능해
 
 `.env.example`에는 선택적 시크릿 예제만 있습니다. 필요 없다면 삭제하고,
 실제 값은 배포 도구의 환경 변수나 별도 시크릿 관리 기능에서 제공합니다.
+
+Spring 상태 검사 예제는 이미지에 Paketo health-checker가 포함되고 Actuator readiness가 8081 포트에 노출된 경우에 사용합니다. THC 환경 변수만 추가해도 검사 실행 파일이나 Actuator가 자동으로 설치되는 것은 아닙니다.

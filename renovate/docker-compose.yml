@@ -1,6 +1,30 @@
+x-deploy-defaults: &deploy-defaults
+  update_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: rollback
+    monitor: 5m
+  rollback_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: pause
+    monitor: 5m
+  restart_policy:
+    condition: any
+    delay: 5s
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 30s
+  retries: 3
+  start_period: 120s
+
+x-service-defaults: &service-defaults
+  stop_grace_period: 120s
+
 services:
   renovate:
-    stop_grace_period: 120s
+    <<: *service-defaults
     image: renovate/renovate:44.176.4
     # entrypoint 는 그대로 둔다. renovate-entrypoint.sh 는 첫 인자가 실행 가능하면
     # renovate 를 덧붙이지 않고 containerbase 셋업을 거쳐 그대로 넘긴다.
@@ -36,20 +60,8 @@ services:
     networks:
       - default
     deploy:
+      <<: *deploy-defaults
       replicas: 1
-      update_config:
-        parallelism: 1
-        order: stop-first
-        failure_action: rollback
-        monitor: 5m
-      rollback_config:
-        parallelism: 1
-        order: stop-first
-        failure_action: pause
-        monitor: 5m
-      restart_policy:
-        condition: any
-        delay: 5s
 
 # 재생성 가능한 캐시라 NFS 내구성이 필요 없고, 컨테이너가 uid 12021(ubuntu) 로
 # 돌기 때문에 NFS 권한 매핑을 맞추는 수고도 피한다.

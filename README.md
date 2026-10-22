@@ -45,7 +45,8 @@ actionlint와 기존 Bats 계약 테스트를 실행합니다. 로컬에서도
 공통 기본형입니다. 종료 유예와 배포 정책은 앵커로 공유하고, 이미지·포트·환경변수·볼륨·
 복제 수는 서비스에 맞게 지정합니다. 상태 검사는 검증된 명령이 있을 때만 활성화합니다.
 네트워크는 MTU 1200의 overlay, 볼륨은 NFS v4 hard 마운트를 기본으로 제공합니다.
-NFS 서버 주소·공유 경로는 자리표시자로 두고, 시간대는 주석 처리한 `TZ` 예제로 제공합니다.
+NFS 기본값은 `100.100.1.1:/volume1/docker/app`이며, `app`은 서비스별로 바꿉니다.
+시간대와 Spring 상태 검사는 주석 처리한 `TZ`·`THC_PORT`·`THC_PATH` 예제로 제공합니다.
 외부 네트워크와 사용자 권한은 서비스에 맞게 지정합니다.
 복사·수정·검증 방법과 선택 항목은 [템플릿 안내](_template/README.md)를 참고하세요.
 
@@ -64,8 +65,8 @@ npx --yes prettier@3.6.2 --check '**/*.{yaml,yml}' '.github/**/*.yaml'
 ```
 
 모든 서비스와 새 스택 템플릿의 종료 유예시간은 `stop_grace_period: 120s`입니다.
-이 값은 `deploy`가 아닌 서비스 수준에 선언하며, 공통 서비스 기본값이 있는
-`platform`, `evergreen`은 해당 기본값에서 상속합니다. 정상 종료를 최대 120초
+이 값은 `deploy`가 아닌 서비스 수준에 선언하며, 모든 스택은
+파일별 `x-service-defaults`에서 상속합니다. 정상 종료를 최대 120초
 기다린 뒤 강제 종료하며, 프로세스가 먼저 종료되면 즉시 다음 단계로 진행합니다.
 
 대부분의 서비스는 복제 태스크 하나를 실행합니다. `platform` 스택의
@@ -106,7 +107,7 @@ Spring 빌드팩 기본 Tiny 이미지에는 셸이 없으므로 셸 기반 검�
 Lotto는 브라우저 실행에 필요한 Playwright run image를 유지합니다.
 Python으로 작성된 `evergreen`의 coin은 Spring 빌드팩 적용 대상이 아닙니다.
 
-검사 포트 8081과 `/actuator/health/liveness` 경로는 각 Spring 서비스의 Compose 환경 변수 `THC_PORT`, `THC_PATH`로 지정합니다.
+검사 포트 8081과 `/actuator/health/readiness` 경로는 각 Spring 서비스의 Compose 환경 변수 `THC_PORT`, `THC_PATH`로 지정합니다.
 GitOps는 `/workspace/health-check`를 직접 실행해 검사 때마다 launcher의 JVM 메모리 계산·인증서 초기화가 반복되지 않도록 합니다. Gradle은 health-checker 빌드팩과 `BP_HEALTH_CHECKER_ENABLED=true`만 유지하며, `BPE_DEFAULT_THC_PORT`·`BPE_DEFAULT_THC_PATH` 기본값은 제거합니다.
 검사 대상 변경은 배포 환경의 `THC_PORT`, `THC_PATH`에서 관리합니다.
 Spring Boot Admin용 Actuator HTTP/JMX 전체 노출 및 접근 허용, probes와 info 항목은 Platform의 공통 설정에서 관리합니다.

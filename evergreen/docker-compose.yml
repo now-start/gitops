@@ -1,5 +1,4 @@
 x-deploy-defaults: &deploy-defaults
-  replicas: 1
   update_config:
     parallelism: 1
     order: stop-first
@@ -13,6 +12,12 @@ x-deploy-defaults: &deploy-defaults
   restart_policy:
     condition: any
     delay: 5s
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 30s
+  retries: 3
+  start_period: 120s
 
 x-service-defaults: &service-defaults
   stop_grace_period: 120s
@@ -29,16 +34,18 @@ x-service-defaults: &service-defaults
 services:
   lotto:
     <<: *service-defaults
+    deploy:
+      <<: *deploy-defaults
+      replicas: 1
     image: ghcr.io/now-start/lotto-service:9.4.4
     environment:
       <<: *environment-defaults
       THC_PORT: "8081"
-      THC_PATH: /actuator/health/liveness
+      THC_PATH: /actuator/health/readiness
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "/workspace/health-check"]
-      interval: 30s
-      timeout: 30s
-      retries: 3
+      # Lotto는 기동 시간이 길어 시작 유예를 300초로 지정합니다.
       start_period: 300s
 
   coin:
@@ -46,6 +53,7 @@ services:
     image: ghcr.io/now-start/evergreen:2.2.7
     deploy:
       <<: *deploy-defaults
+      replicas: 1
       placement:
         constraints:
           - node.hostname == NOW_START

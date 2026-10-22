@@ -1,6 +1,30 @@
+x-deploy-defaults: &deploy-defaults
+  update_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: rollback
+    monitor: 5m
+  rollback_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: pause
+    monitor: 5m
+  restart_policy:
+    condition: any
+    delay: 5s
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 30s
+  retries: 3
+  start_period: 120s
+
+x-service-defaults: &service-defaults
+  stop_grace_period: 120s
+
 services:
   grafana:
-    stop_grace_period: 120s
+    <<: *service-defaults
     image: grafana/otel-lgtm:0.37.0
     ports:
       - target: 3000
@@ -36,29 +60,14 @@ services:
     volumes:
       - grafana_data:/data
     healthcheck:
+      <<: *healthcheck-defaults
       test: ["CMD", "/otel-lgtm/docker/healthcheck.sh"]
-      interval: 30s
-      timeout: 30s
-      retries: 3
-      start_period: 120s
     deploy:
+      <<: *deploy-defaults
       replicas: 1
       placement:
         constraints:
           - node.role == manager
-      update_config:
-        parallelism: 1
-        order: stop-first
-        failure_action: rollback
-        monitor: 5m
-      rollback_config:
-        parallelism: 1
-        order: stop-first
-        failure_action: pause
-        monitor: 5m
-      restart_policy:
-        condition: any
-        delay: 5s
 
 networks:
   default:
