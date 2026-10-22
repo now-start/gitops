@@ -1,44 +1,55 @@
+x-deploy-defaults: &deploy-defaults
+  update_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: rollback
+    monitor: 5m
+  rollback_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: pause
+    monitor: 5m
+  restart_policy:
+    condition: any
+    delay: 5s
+
+x-service-defaults: &service-defaults
+  stop_grace_period: 120s
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 30s
+  retries: 3
+  start_period: 120s
+
 services:
   app:
+    <<: *service-defaults
     image: REPLACE_IMAGE:0.0.0
-    environment:
-      TZ: Asia/Seoul
-      APP_SECRET: ${APP_SECRET:-}
-    volumes:
-      - app_data:/data
-    healthcheck:
-      # Use an executable verified in the image; CMD does not require a shell.
-      test: ["CMD", "REPLACE_HEALTHCHECK_EXECUTABLE"]
-      interval: 30s
-      timeout: 30s
-      retries: 3
-      start_period: 120s
+    # Add only the settings this service needs.
+    # ports:
+    #   - target: 8080
+    #     published: 8080
+    #     protocol: tcp
+    #     mode: ingress
+    # environment:
+    #   APP_SECRET: ${APP_SECRET:-}
+    # volumes:
+    #   - app_data:/data
+    # Enable only after choosing a command available in this image.
+    # healthcheck:
+    #   <<: *healthcheck-defaults
+    #   test: ["CMD", "REPLACE_HEALTHCHECK_EXECUTABLE"]
     deploy:
+      <<: *deploy-defaults
+      mode: replicated
       replicas: 1
-      update_config:
-        parallelism: 1
-        order: stop-first
-        failure_action: rollback
-        monitor: 5m
-      rollback_config:
-        parallelism: 1
-        order: stop-first
-        failure_action: pause
-        monitor: 5m
-      restart_policy:
-        condition: any
-        delay: 5s
+      # For one task per node: use mode: global and remove replicas.
 
 networks:
   default:
     driver: overlay
-    driver_opts:
-      com.docker.network.driver.mtu: "1200"
-
-volumes:
-  app_data:
-    driver: local
-    driver_opts:
-      type: nfs
-      o: addr=100.100.1.1,vers=4,hard
-      device: :/volume1/docker/REPLACE_STACK
+# Optional node-local storage. Choose a shared volume driver when needed.
+# volumes:
+#   app_data:
+#     driver: local

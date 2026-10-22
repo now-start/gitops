@@ -15,6 +15,7 @@ x-deploy-defaults: &deploy-defaults
 
 services:
   agent:
+    stop_grace_period: 120s
     # Docker API versions differ; the entry point stays on 1.43 managers.
     image: portainer/agent:2.45.3
     volumes:
@@ -28,6 +29,7 @@ services:
           - node.role == manager
 
   agent-worker:
+    stop_grace_period: 120s
     # Do not publish ports: ingress can select the wrong Serf advertise IP.
     image: portainer/agent:2.45.3
     environment:
@@ -43,6 +45,7 @@ services:
           - node.role == worker
 
   portainer:
+    stop_grace_period: 120s
     image: portainer/portainer-ce:2.45.3
     command: -H tcp://tasks.agent:9001 --tlsskipverify
     ports:

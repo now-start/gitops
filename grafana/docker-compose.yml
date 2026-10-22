@@ -1,5 +1,6 @@
 services:
   grafana:
+    stop_grace_period: 120s
     image: grafana/otel-lgtm:0.37.0
     ports:
       - target: 3000

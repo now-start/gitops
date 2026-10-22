@@ -1,5 +1,6 @@
 services:
   bitwarden:
+    stop_grace_period: 120s
     image: vaultwarden/server:1.37.4
     ports:
       - target: 80

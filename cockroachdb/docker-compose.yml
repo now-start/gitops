@@ -83,6 +83,7 @@ services:
       endpoint_mode: dnsrr
 
   init:
+    stop_grace_period: 120s
     image: cockroachdb/cockroach:v24.3.37
     entrypoint: ["/bin/sh", "-ec"]
     command:
@@ -114,6 +115,7 @@ services:
       replicas: 1
 
   decommissioner:
+    stop_grace_period: 120s
     image: docker:29.9.2-cli
     entrypoint: ["/bin/sh", "-ec"]
     command:

@@ -1,5 +1,6 @@
 services:
   flame:
+    stop_grace_period: 120s
     image: pawelmalak/flame:2.4.0
     ports:
       - target: 5005
