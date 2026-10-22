@@ -60,12 +60,9 @@ services:
   admin:
     <<: *service-defaults
     stop_grace_period: 120s
-    image: ghcr.io/now-start/admin:2.11.19
+    image: ghcr.io/now-start/admin:2.11.20
     deploy:
       <<: *global-deploy-defaults
-      placement:
-        constraints:
-          - node.labels.platform_admin_maintenance == enabled
     environment:
       TZ: Asia/Seoul
       THC_PORT: "8081"
