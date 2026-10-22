@@ -1,3 +1,18 @@
+x-deploy-defaults: &deploy-defaults
+  update_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: rollback
+    monitor: 5m
+  rollback_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: pause
+    monitor: 5m
+  restart_policy:
+    condition: any
+    delay: 5s
+
 services:
   cockroachdb:
     image: cockroachdb/cockroach:v24.3.37
@@ -63,21 +78,9 @@ services:
     # Intentionally no healthcheck: readiness probes deadlock Swarm service
     # discovery before cluster initialization.
     deploy:
+      <<: *deploy-defaults
       mode: global
       endpoint_mode: dnsrr
-      update_config:
-        parallelism: 1
-        order: stop-first
-        failure_action: rollback
-        monitor: 5m
-      rollback_config:
-        parallelism: 1
-        order: stop-first
-        failure_action: pause
-        monitor: 5m
-      restart_policy:
-        condition: any
-        delay: 5s
 
   init:
     image: cockroachdb/cockroach:v24.3.37
@@ -250,23 +253,11 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     deploy:
+      <<: *deploy-defaults
       replicas: 1
       placement:
         constraints:
           - node.role == manager
-      update_config:
-        parallelism: 1
-        order: stop-first
-        failure_action: rollback
-        monitor: 5m
-      rollback_config:
-        parallelism: 1
-        order: stop-first
-        failure_action: pause
-        monitor: 5m
-      restart_policy:
-        condition: any
-        delay: 5s
 
 networks:
   default:

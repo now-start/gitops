@@ -4,23 +4,23 @@ on:
   workflow_call:
     inputs:
       registry-org:
-        description: 'Registry organization/namespace (e.g., ghcr.io/now-start)'
+        description: "Registry organization/namespace (e.g., ghcr.io/now-start)"
         required: false
         type: string
-        default: 'ghcr.io/now-start'
+        default: "ghcr.io/now-start"
       java-version:
-        description: 'Explicit JDK version; leave empty to detect it from Gradle files'
+        description: "Explicit JDK version; leave empty to detect it from Gradle files"
         required: false
         type: string
-        default: ''
+        default: ""
       module:
-        description: 'Gradle submodule name (e.g., config-service). Empty for single-module projects.'
+        description: "Gradle submodule name (e.g., config-service). Empty for single-module projects."
         required: false
         type: string
-        default: ''
+        default: ""
     secrets:
       registry-password:
-        description: 'Registry password/token'
+        description: "Registry password/token"
         required: true
 
 concurrency:

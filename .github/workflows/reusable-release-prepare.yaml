@@ -10,7 +10,7 @@ on:
       tag-prefix:
         description: Optional module prefix without the separating dash
         type: string
-        default: ''
+        default: ""
     outputs:
       version:
         description: Validated project SemVer

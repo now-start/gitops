@@ -6,11 +6,11 @@ on:
       java-version:
         description: Explicit JDK version, empty for automatic detection
         type: string
-        default: ''
+        default: ""
       module:
         description: Gradle submodule name, empty for a single-module project
         type: string
-        default: ''
+        default: ""
     outputs:
       version:
         description: Validated project SemVer
@@ -93,8 +93,8 @@ jobs:
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
           java-version: ${{ steps.java-info.outputs.version }}
-          distribution: 'temurin'
-          cache: 'gradle'
+          distribution: "temurin"
+          cache: "gradle"
 
       - name: Extract version from build.gradle
         id: version

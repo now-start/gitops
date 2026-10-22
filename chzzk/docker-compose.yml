@@ -2,6 +2,7 @@ services:
   nyang-nyang-bot:
     image: ghcr.io/now-start/nyang-nyang-bot:5.9.11
     user: root
+    stop_grace_period: 120s
     environment:
       TZ: Asia/Seoul
       THC_PORT: "8081"

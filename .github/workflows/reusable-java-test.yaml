@@ -4,19 +4,19 @@ on:
   workflow_call:
     inputs:
       java-version:
-        description: 'Java version (if not specified, it will be detected from build.gradle)'
+        description: "Java version (if not specified, it will be detected from build.gradle)"
         required: false
         type: string
       distribution:
-        description: 'JDK distribution'
+        description: "JDK distribution"
         required: false
         type: string
-        default: 'temurin'
+        default: "temurin"
       module:
-        description: 'Gradle submodule name (e.g., config-service). Empty for single-module projects.'
+        description: "Gradle submodule name (e.g., config-service). Empty for single-module projects."
         required: false
         type: string
-        default: ''
+        default: ""
 
 permissions:
   contents: read
@@ -75,7 +75,7 @@ jobs:
         with:
           java-version: ${{ steps.java-info.outputs.version }}
           distribution: ${{ inputs.distribution }}
-          cache: 'gradle'
+          cache: "gradle"
 
       - name: Make gradlew executable
         run: chmod +x gradlew

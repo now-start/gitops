@@ -1,34 +1,37 @@
+x-deploy-defaults: &deploy-defaults
+  replicas: 1
+  update_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: rollback
+    monitor: 5m
+  rollback_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: pause
+    monitor: 5m
+  restart_policy:
+    condition: any
+    delay: 5s
+
 x-service-defaults: &service-defaults
   user: root
-  environment:
+  environment: &environment-defaults
     TZ: Asia/Seoul
     SPRING_CONFIG_IMPORT: configserver:http://config:8888
   networks:
     - platform_default
     - grafana_default
-  deploy: &deploy-defaults
-    replicas: 1
-    update_config:
-      parallelism: 1
-      order: stop-first
-      failure_action: rollback
-      monitor: 5m
-    rollback_config:
-      parallelism: 1
-      order: stop-first
-      failure_action: pause
-      monitor: 5m
-    restart_policy:
-      condition: any
-      delay: 5s
+  deploy:
+    <<: *deploy-defaults
 
 services:
   lotto:
     <<: *service-defaults
     image: ghcr.io/now-start/lotto-service:9.4.4
+    stop_grace_period: 120s
     environment:
-      TZ: Asia/Seoul
-      SPRING_CONFIG_IMPORT: configserver:http://config:8888
+      <<: *environment-defaults
       THC_PORT: "8081"
       THC_PATH: /actuator/health/liveness
     healthcheck:

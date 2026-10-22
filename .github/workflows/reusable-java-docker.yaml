@@ -4,34 +4,34 @@ on:
   workflow_call:
     inputs:
       registry-org:
-        description: 'Registry organization/namespace (e.g., ghcr.io/now-start)'
+        description: "Registry organization/namespace (e.g., ghcr.io/now-start)"
         required: false
         type: string
-        default: 'ghcr.io/now-start'
+        default: "ghcr.io/now-start"
       version:
-        description: 'Project version (e.g., 1.2.3)'
+        description: "Project version (e.g., 1.2.3)"
         required: true
         type: string
       java-version:
-        description: 'Java version for bootBuildImage'
+        description: "Java version for bootBuildImage"
         required: true
         type: string
       module:
-        description: 'Gradle submodule name (e.g., config-service). Empty for single-module projects.'
+        description: "Gradle submodule name (e.g., config-service). Empty for single-module projects."
         required: false
         type: string
-        default: ''
+        default: ""
       source-sha:
-        description: 'Commit that must own the immutable image tag'
+        description: "Commit that must own the immutable image tag"
         required: true
         type: string
       tag-exists:
-        description: 'Whether the matching Git tag already exists'
+        description: "Whether the matching Git tag already exists"
         required: true
         type: string
     secrets:
       registry-password:
-        description: 'Registry password/token'
+        description: "Registry password/token"
         required: true
 
 permissions:
@@ -60,8 +60,8 @@ jobs:
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
           java-version: ${{ inputs.java-version }}
-          distribution: 'temurin'
-          cache: 'gradle'
+          distribution: "temurin"
+          cache: "gradle"
 
       - name: Make gradlew executable
         run: chmod +x gradlew

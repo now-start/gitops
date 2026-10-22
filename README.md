@@ -37,7 +37,6 @@ actionlint와 기존 Bats 계약 테스트를 실행합니다. 로컬에서도
 | `evergreen` | `evergreen/docker-compose.yml` | 로또·코인 서비스 | `platform_default`, `grafana_default` |
 | `bitwarden` | `bitwarden/docker-compose.yml` | Vaultwarden | NFS |
 | `flame` | `flame/docker-compose.yml` | Flame 대시보드 | NFS |
-| `redis` | `redis/docker-compose.yml` | Redis 데이터 저장소 | NFS |
 | `renovate` | `renovate/docker-compose.yml` | 이미지 태그와 GitHub Actions 의존성을 갱신하는 자체 호스팅 Renovate | 없음 |
 
 ## 새 스택 템플릿
@@ -60,6 +59,20 @@ actionlint와 기존 Bats 계약 테스트를 실행합니다. 로컬에서도
 업데이트 실패 시 자동 롤백, 재시작 조건 `any`를 사용합니다.
 상태 검사 명령만 서비스별로 다르게 지정합니다. 이미지에 사용할 수 있는
 검사 도구가 없는 스택도 상태 검사 없이 동일한 배포 정책을 사용합니다.
+
+YAML은 Prettier 3.6.2 기본 형식과 LF 줄바꿈을 사용합니다.
+여러 서비스에서 반복되는 배포 정책은 파일 상단의 `x-deploy-defaults`에,
+반복되는 환경 변수는 `environment-defaults` 앵커에 모읍니다.
+서로 다른 스택은 독립 배포되므로 다른 파일의 앵커에 의존하지 않습니다.
+
+```bash
+npx --yes prettier@3.6.2 --check '**/*.{yaml,yml}' '.github/**/*.yaml'
+```
+
+Spring 서비스의 종료 유예시간은 `stop_grace_period: 120s`입니다.
+`platform`은 공통 서비스 기본값에서 상속하고, `barosteel`, `chzzk`, Lotto에도
+같은 값을 적용합니다. 종료 처리와 Eureka 등록 해제 전에 Docker가 강제 종료하지
+않도록 하기 위한 설정이며, 이미지 버전이나 자기보호 임계값은 변경하지 않습니다.
 
 대부분의 서비스는 복제 태스크 하나를 실행합니다. `platform` 스택의
 `config`, `eureka`, `admin`, `gateway`는 global 모드를 사용하므로,
@@ -92,8 +105,7 @@ drain 상태로 전환하면 `coin`은 다른 노드로 장애 조치할 수 없
 ## 상태 검사
 
 상태 검사(healthcheck)는 이미지에 검증된 검사 도구가 있을 때만 활성화합니다.
-Vaultwarden과 Grafana는 내장 스크립트, Flame은 Node.js,
-Redis는 인증된 `PING`을 사용합니다.
+Vaultwarden과 Grafana는 내장 스크립트, Flame은 Node.js를 사용합니다.
 Spring 빌드팩 기본 Tiny 이미지에는 셸이 없으므로 셸 기반 검사를 사용하지 않습니다.
 `barosteel`, `platform`의 config/eureka/admin/gateway, `chzzk`의 냥냥봇,
 `evergreen`의 lotto는 Paketo health-checker를 포함한 새 이미지로 교체한 뒤 검사합니다.
@@ -141,7 +153,7 @@ Lotto는 Backup에서 실제 기동에 약 176초가 걸린 사례에 맞춰 시
 [배포 안내](barosteel/README.md)를 참고하세요.
 
 1. `grafana`, `platform`, `chzzk`, `cockroachdb`, `evergreen`,
-   `bitwarden`, `flame`, `redis`를 Git 연동 스택으로 생성합니다.
+   `bitwarden`, `flame`을 Git 연동 스택으로 생성합니다.
    `portainer` 스택은 자체 업데이트 실패로 관리 기능까지 중단되지 않도록
    수동으로 관리합니다.
 2. 브랜치는 `main`, 스택 이름은 디렉터리 이름, Compose 경로는 위 표의 경로를 사용합니다.
@@ -240,7 +252,7 @@ Swarm 태스크가 교체됩니다. 기준 버전 변경을 병합한 뒤 아래
 1. `portainer`, `grafana`
 2. `platform`
 3. `chzzk`, `evergreen`
-4. `bitwarden`, `flame`, `redis`
+4. `bitwarden`, `flame`
 
 ### `spring`에서 `platform`으로 이전
 
@@ -368,7 +380,6 @@ Renovate가 같은 버전을 즉시 다시 제안하지 않도록 커밋을 되�
 | `grafana` | `GRAFANA_OAUTH_CLIENT_SECRET`, `GRAFANA_SMTP_PASSWORD` |
 | `platform` | `SPRING_ENCRYPT_KEY` |
 | `flame` | `FLAME_PASSWORD` |
-| `redis` | `REDIS_PASSWORD` |
 | `renovate` | `RENOVATE_TOKEN` |
 
 `.env.example` 템플릿에는 시크릿 변수 이름만 기록합니다.
@@ -419,8 +430,6 @@ SPRING_ENCRYPT_KEY=test docker stack config -c platform/docker-compose.yml >/dev
 docker stack config -c chzzk/docker-compose.yml >/dev/null
 
 docker stack config -c evergreen/docker-compose.yml >/dev/null
-
-REDIS_PASSWORD=test docker stack config -c redis/docker-compose.yml >/dev/null
 
 docker stack config -c portainer/docker-compose.yml >/dev/null
 ```

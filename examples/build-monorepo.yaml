@@ -26,7 +26,7 @@ jobs:
   config:
     uses: now-start/gitops/.github/workflows/reusable-java-app.yaml@main
     with:
-      module: config          # Gradle 서브모듈 이름 (:config:build, :config:bootBuildImage 등)
+      module: config # Gradle 서브모듈 이름 (:config:build, :config:bootBuildImage 등)
     secrets:
       registry-password: ${{ secrets.GITHUB_TOKEN }}
 

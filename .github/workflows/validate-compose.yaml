@@ -23,7 +23,6 @@ jobs:
       FLAME_PASSWORD: test
       GRAFANA_OAUTH_CLIENT_SECRET: test
       GRAFANA_SMTP_PASSWORD: test
-      REDIS_PASSWORD: test
       SPRING_ENCRYPT_KEY: test
     steps:
       - name: Checkout repository
@@ -38,12 +37,12 @@ jobs:
             barosteel/docker-compose.yml
             bitwarden/docker-compose.yml
             chzzk/docker-compose.yml
+            cockroachdb/docker-compose.yml
             evergreen/docker-compose.yml
             flame/docker-compose.yml
             grafana/docker-compose.yml
             platform/docker-compose.yml
             portainer/docker-compose.yml
-            redis/docker-compose.yml
             renovate/docker-compose.yml
           )
 

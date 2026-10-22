@@ -26,7 +26,7 @@ x-service-defaults: &service-defaults
     timeout: 30s
     retries: 3
     start_period: 120s
-  environment:
+  environment: &environment-defaults
     TZ: Asia/Seoul
     THC_PORT: "8081"
     THC_PATH: /actuator/health/liveness
@@ -64,11 +64,8 @@ services:
     deploy:
       <<: *global-deploy-defaults
     environment:
-      TZ: Asia/Seoul
-      THC_PORT: "8081"
-      THC_PATH: /actuator/health/liveness
+      <<: *environment-defaults
       JAVA_TOOL_OPTIONS: -XX:MaxDirectMemorySize=256m
-      SPRING_CONFIG_IMPORT: configserver:http://config:8888
 
   gateway:
     <<: *service-defaults
@@ -81,11 +78,8 @@ services:
         protocol: tcp
         mode: ingress
     environment:
-      TZ: Asia/Seoul
-      THC_PORT: "8081"
-      THC_PATH: /actuator/health/liveness
+      <<: *environment-defaults
       JAVA_TOOL_OPTIONS: -XX:MaxDirectMemorySize=256m
-      SPRING_CONFIG_IMPORT: configserver:http://config:8888
 
 networks:
   default:

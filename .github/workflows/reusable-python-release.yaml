@@ -10,7 +10,7 @@ on:
       prerelease:
         description: Whether to publish a GitHub prerelease
         type: string
-        default: 'false'
+        default: "false"
       source-sha:
         description: Commit that the Git tag must reference
         required: true
