@@ -110,10 +110,8 @@ services:
     environment:
       TZ: Asia/Seoul
     deploy:
+      <<: *deploy-defaults
       replicas: 1
-      restart_policy:
-        condition: on-failure
-        delay: 10s
 
   decommissioner:
     image: docker:29.9.2-cli
