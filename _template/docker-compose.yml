@@ -4,11 +4,13 @@ x-deploy-defaults: &deploy-defaults
     order: stop-first
     failure_action: rollback
     monitor: 5m
+    delay: 10s
   rollback_config:
     parallelism: 1
     order: stop-first
     failure_action: pause
     monitor: 5m
+    delay: 10s
   restart_policy:
     condition: any
     delay: 5s
