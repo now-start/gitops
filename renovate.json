@@ -5,6 +5,7 @@
   "ignorePaths": ["_template/**"],
   "pinDigests": false,
   "timezone": "Asia/Seoul",
+  "prHourlyLimit": 0,
   "automerge": false,
   "automergeType": "pr",
   "platformAutomerge": false,
