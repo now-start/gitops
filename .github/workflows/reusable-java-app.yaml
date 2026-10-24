@@ -89,3 +89,15 @@ jobs:
       source-sha: ${{ needs.prepare.outputs.source-sha }}
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  coverage-badge:
+    if: >-
+      ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          needs.build.result == 'success' && needs.build.outputs.coverage-available == 'true' }}
+    needs: build
+    permissions:
+      actions: read
+      contents: write
+    uses: ./.github/workflows/reusable-java-coverage.yaml
+    with:
+      module: ${{ inputs.module }}

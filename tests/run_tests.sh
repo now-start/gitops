@@ -31,6 +31,12 @@ for TEST_FILE in "$BATS_DIR"/*.bats; do
   echo ""
 done
 
+if python3 -B -m unittest discover -s "$REPO_ROOT/tests" -p 'test_coverage*.py'; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+fi
+
 # ── 결과 ─────────────────────────────────────────────────────────────────────
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  Test suites passed: $PASS  Failed: $FAIL"

@@ -1,0 +1,82 @@
+name: Reusable Java Coverage Badge
+
+on:
+  workflow_call:
+    inputs:
+      module:
+        description: "Module owning the coverage report; empty for the root project"
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: write
+    concurrency:
+      group: ${{ github.repository }}-coverage-badge-${{ inputs.module || 'root' }}-main
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: jacoco-badge-${{ inputs.module || 'root' }}
+          path: coverage-result
+      - name: 최신 main의 성공 측정만 coverage 브랜치에 저장
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          MODULE: ${{ inputs.module }}
+        with:
+          script: |
+            const fs = require('fs');
+            const repo = context.repo;
+            const module = process.env.MODULE;
+            if (module && !/^[a-zA-Z0-9_.-]+$/.test(module)) throw new Error('Invalid module');
+            const prefix = module ? `${module}/` : '';
+            const summary = fs.readFileSync('coverage-result/summary.json', 'utf8');
+            if (JSON.parse(summary).source_sha !== context.sha) {
+              throw new Error('보고서의 기준 커밋이 실행 커밋과 다릅니다.');
+            }
+            for (let attempt = 0; attempt < 5; attempt++) {
+              const main = await github.rest.git.getRef({...repo, ref: 'heads/main'});
+              if (main.data.object.sha !== context.sha) {
+                core.notice('더 최신 main이 있으므로 이전 커밋의 배지를 게시하지 않습니다.');
+                return;
+              }
+              let previous;
+              try {
+                previous = (await github.rest.git.getRef({...repo, ref: 'heads/coverage'})).data.object.sha;
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+              const baseTree = previous
+                ? (await github.rest.git.getCommit({...repo, commit_sha: previous})).data.tree.sha
+                : undefined;
+              const tree = await github.rest.git.createTree({...repo, ...(baseTree ? {base_tree: baseTree} : {}), tree: [
+                {path: prefix + 'jacoco.svg', mode: '100644', type: 'blob', content: fs.readFileSync('coverage-result/jacoco.svg', 'utf8')},
+                {path: prefix + 'jacoco-branches.svg', mode: '100644', type: 'blob', content: fs.readFileSync('coverage-result/jacoco-branches.svg', 'utf8')},
+                {path: prefix + 'summary.json', mode: '100644', type: 'blob', content: summary}
+              ]});
+              const commit = await github.rest.git.createCommit({...repo,
+                message: `docs: JaCoCo 커버리지 갱신 (${context.sha.slice(0, 7)})`,
+                tree: tree.data.sha, parents: previous ? [previous] : []
+              });
+              try {
+                if (previous) {
+                  await github.rest.git.updateRef({...repo, ref: 'heads/coverage', sha: commit.data.sha, force: false});
+                } else {
+                  await github.rest.git.createRef({...repo, ref: 'refs/heads/coverage', sha: commit.data.sha});
+                }
+                break;
+              } catch (error) {
+                if (![409, 422].includes(error.status) || attempt === 4) throw error;
+              }
+            }
+            core.summary.addHeading('JaCoCo 전체 라인 커버리지')
+              .addRaw(`라인 ${JSON.parse(summary).line_percent}% · 분기 ${JSON.parse(summary).branch_percent}% · ${context.sha}`).write();

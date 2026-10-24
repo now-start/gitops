@@ -161,3 +161,12 @@ exit 42
   ' "$WORKFLOW"
   [ "$status" -eq 0 ]
 }
+
+@test "AMD64 build uses the verified multiarch builder instead of broken latest" {
+  export ARCH=amd64
+  build
+  [ "$status" -eq 0 ]
+  grep -F -- '--imagePlatform=linux/amd64' gradle-call
+  grep -F -- '--builder=docker.io/paketobuildpacks/builder-noble-java-tiny:0.0.200@sha256:7c62dd7e66b277ec9fa2b60d0ad74c4e9ef15db7910dcdf51126e62a02a31463' gradle-call
+  grep -F 'push ghcr.io/example/app:build-0123456789abcdef-amd64' "$MOCK_LOG"
+}

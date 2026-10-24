@@ -482,3 +482,13 @@ CI 이미지 발행 → Renovate DEV PR → 병합 → Portainer DEV 배포·검
   → STG 승격 PR → 병합 → Portainer STG 배포·검증
   → PRD 승격 PR → 승인·병합 → Portainer PRD 배포·검증
 ```
+
+### Java 커버리지
+
+공통 Java 테스트는 `build`를 실행한다. 각 앱에서 JaCoCo 보고서 태스크를 Gradle `check`에 연결하고 XML/HTML 출력을 활성화하면 로컬과 CI가 같은 검증 흐름을 사용한다. 공통 워크플로우는 별도로 테스트나 JaCoCo 태스크를 실행하지 않는다.
+
+생성된 `**/build/reports/jacoco/`는 `jacoco-coverage-<module 또는 root>` 산출물로 30일 보관한다. 해당 프로젝트의 `build/reports/jacoco/root/jacoco.xml`을 우선 사용하고, 없으면 프로젝트 보고서 디렉터리의 유일한 XML을 사용한다. 여러 XML을 임의로 합산하지 않으며, 보고서가 없거나 선택이 모호하면 배지는 건너뛴다. 단일 모듈 호출은 지정한 모듈 범위만 사용한다.
+
+배지와 측정 SHA는 `jacoco-badge-<module 또는 root>` 산출물에 보관한다. 성공한 최신 main 빌드만 별도의 쓰기 권한 job에서 `coverage` 브랜치를 갱신한다. 루트는 `jacoco.svg`, `jacoco-branches.svg`, `summary.json`, 모듈은 `<module>/` 아래에 저장하며 다른 모듈의 배지는 보존한다. PR은 산출물만 생성한다. 기존 버전 정책으로 build가 생략되면 커버리지도 갱신되지 않는다.
+
+Java 이미지 builder는 AMD64/ARM64가 모두 검증된 `builder-noble-java-tiny:0.0.200`의 index digest로 고정한다. 2026-10-24 확인한 `latest`는 ARM64 단일 manifest여서 AMD64 빌드가 실패했다. builder 갱신 시 두 플랫폼과 실제 이미지 빌드를 함께 확인한다.
