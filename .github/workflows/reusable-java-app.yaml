@@ -96,7 +96,6 @@ jobs:
           needs.build.result == 'success' && needs.build.outputs.coverage-available == 'true' }}
     needs: build
     permissions:
-      actions: read
       contents: write
     uses: ./.github/workflows/reusable-java-coverage.yaml
     with:
