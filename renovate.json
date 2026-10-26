@@ -20,6 +20,14 @@
       "matchPackageNames": ["renovate/renovate"],
       "schedule": ["* 0-5 * * *"],
       "updateNotScheduled": false
+    },
+    {
+      "description": "Pause barosteel automerge during approval-policy deployment",
+      "matchManagers": ["docker-compose"],
+      "matchDatasources": ["docker"],
+      "matchFileNames": ["barosteel/docker-compose.yml"],
+      "matchPackageNames": ["ghcr.io/now-start/barosteel"],
+      "automerge": false
     }
   ]
 }
