@@ -26,7 +26,7 @@ x-service-defaults: &service-defaults
 
 services:
   barosteel:
-    image: ghcr.io/now-start/barosteel:0.2.7
+    image: ghcr.io/now-start/barosteel:0.2.8
     user: root
     <<: *service-defaults
     environment:
