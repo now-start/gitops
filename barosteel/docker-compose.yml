@@ -41,7 +41,7 @@ services:
     deploy:
       <<: *deploy-defaults
       mode: replicated
-      replicas: 2
+      replicas: 0
       endpoint_mode: vip
 
 networks:
