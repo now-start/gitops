@@ -27,7 +27,7 @@ x-service-defaults: &service-defaults
 services:
   grafana:
     <<: *service-defaults
-    image: grafana/otel-lgtm:0.38.0
+    image: grafana/otel-lgtm:0.38.1
     ports:
       - target: 3000
         published: 3000
