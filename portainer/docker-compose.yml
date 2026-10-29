@@ -28,7 +28,7 @@ services:
   agent:
     <<: *service-defaults
     # Docker API versions differ; the entry point stays on 1.43 managers.
-    image: portainer/agent:2.45.3
+    image: portainer/agent:3.0.0
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /volume1/@docker/volumes:/var/lib/docker/volumes
@@ -42,7 +42,7 @@ services:
   agent-worker:
     <<: *service-defaults
     # Do not publish ports: ingress can select the wrong Serf advertise IP.
-    image: portainer/agent:2.45.3
+    image: portainer/agent:3.0.0
     environment:
       AGENT_CLUSTER_ADDR: tasks.agent
     volumes:
