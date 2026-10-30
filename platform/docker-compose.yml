@@ -52,7 +52,6 @@ services:
       <<: *global-deploy-defaults
       resources:
         limits:
-          cpus: "2"
           memory: 1G
         reservations:
           memory: 1G
@@ -70,7 +69,6 @@ services:
       <<: *global-deploy-defaults
       resources:
         limits:
-          cpus: "2"
           memory: 1G
         reservations:
           memory: 1G
@@ -82,7 +80,6 @@ services:
       <<: *global-deploy-defaults
       resources:
         limits:
-          cpus: "2"
           memory: 1.5G
         reservations:
           memory: 1.5G
@@ -97,7 +94,6 @@ services:
       <<: *global-deploy-defaults
       resources:
         limits:
-          cpus: "2"
           memory: 2G
         reservations:
           memory: 2G

@@ -37,7 +37,6 @@ services:
       mode: global
       resources:
         limits:
-          cpus: "0.25"
           memory: 0.125G
         reservations:
           memory: 0.125G
@@ -59,7 +58,6 @@ services:
       mode: global
       resources:
         limits:
-          cpus: "0.25"
           memory: 0.125G
         reservations:
           memory: 0.125G
@@ -83,7 +81,6 @@ services:
       replicas: 1
       resources:
         limits:
-          cpus: "0.5"
           memory: 0.25G
         reservations:
           memory: 0.25G
