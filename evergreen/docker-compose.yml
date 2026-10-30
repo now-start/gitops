@@ -56,6 +56,10 @@ services:
   coin:
     <<: *service-defaults
     image: ghcr.io/now-start/evergreen:2.2.7
+    environment:
+      <<: *environment-defaults
+      # Empty uses socket.gethostname() and overrides Spring-only placeholders.
+      EUREKA_INSTANCE_HOSTNAME: ""
     deploy:
       <<: *deploy-defaults
       replicas: 1
