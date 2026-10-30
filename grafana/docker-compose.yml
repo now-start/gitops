@@ -61,6 +61,15 @@ services:
       GF_SMTP_FROM_ADDRESS: no-reply@nowstart.org
     volumes:
       - grafana_data:/data
+    configs:
+      - source: dashboards_provider_v1
+        target: /otel-lgtm/grafana/conf/provisioning/dashboards/operations.yaml
+      - source: dashboard_services_v1
+        target: /otel-lgtm/operations-dashboards/services.json
+      - source: dashboard_spring_v1
+        target: /otel-lgtm/operations-dashboards/spring.json
+      - source: dashboard_swarm_v1
+        target: /otel-lgtm/operations-dashboards/swarm.json
     healthcheck:
       <<: *healthcheck-defaults
       test: ["CMD", "/otel-lgtm/docker/healthcheck.sh"]
@@ -75,6 +84,16 @@ services:
       placement:
         constraints:
           - node.role == manager
+
+configs:
+  dashboards_provider_v1:
+    file: ./dashboards-provider.yaml
+  dashboard_services_v1:
+    file: ./dashboards/services.json
+  dashboard_spring_v1:
+    file: ./dashboards/spring.json
+  dashboard_swarm_v1:
+    file: ./dashboards/swarm.json
 
 networks:
   default:

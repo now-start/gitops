@@ -1,0 +1,11 @@
+apiVersion: 1
+providers:
+  - name: now-start-operations
+    orgId: 1
+    folder: Now Start Operations
+    type: file
+    disableDeletion: false
+    editable: false
+    updateIntervalSeconds: 30
+    options:
+      path: /otel-lgtm/operations-dashboards
