@@ -64,6 +64,12 @@ services:
     deploy:
       <<: *deploy-defaults
       replicas: 1
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+        reservations:
+          memory: 1G
 
 # 재생성 가능한 캐시라 NFS 내구성이 필요 없고, 컨테이너가 uid 12021(ubuntu) 로
 # 돌기 때문에 NFS 권한 매핑을 맞추는 수고도 피한다.

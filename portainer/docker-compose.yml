@@ -35,6 +35,12 @@ services:
     deploy:
       <<: *deploy-defaults
       mode: global
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 0.125G
+        reservations:
+          memory: 0.125G
       placement:
         constraints:
           - node.role == manager
@@ -51,6 +57,12 @@ services:
     deploy:
       <<: *deploy-defaults
       mode: global
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 0.125G
+        reservations:
+          memory: 0.125G
       placement:
         constraints:
           - node.role == worker
@@ -69,6 +81,12 @@ services:
     deploy:
       <<: *deploy-defaults
       replicas: 1
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 0.25G
+        reservations:
+          memory: 0.25G
       placement:
         constraints:
           - node.role == manager

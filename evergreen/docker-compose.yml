@@ -39,6 +39,12 @@ services:
     deploy:
       <<: *deploy-defaults
       replicas: 1
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+        reservations:
+          memory: 1G
     image: ghcr.io/now-start/lotto-service:9.4.4
     environment:
       <<: *environment-defaults
@@ -54,6 +60,12 @@ services:
     deploy:
       <<: *deploy-defaults
       replicas: 1
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 0.5G
+        reservations:
+          memory: 0.5G
       placement:
         constraints:
           - node.hostname == NOW_START

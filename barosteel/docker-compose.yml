@@ -43,6 +43,12 @@ services:
       mode: replicated
       replicas: 2
       endpoint_mode: vip
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1.5G
+        reservations:
+          memory: 1.5G
 
 networks:
   default:
