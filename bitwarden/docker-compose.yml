@@ -27,7 +27,7 @@ x-service-defaults: &service-defaults
 services:
   bitwarden:
     <<: *service-defaults
-    image: vaultwarden/server:1.37.4
+    image: vaultwarden/server:1.37.5
     ports:
       - target: 80
         published: 1080
