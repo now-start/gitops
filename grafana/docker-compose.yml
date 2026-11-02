@@ -78,9 +78,8 @@ services:
 
 networks:
   default:
-    driver: overlay
-    driver_opts:
-      com.docker.network.driver.mtu: "1200"
+    external: true
+    name: platform_default
 
 volumes:
   grafana_data:

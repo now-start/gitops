@@ -29,12 +29,12 @@ actionlint와 기존 Bats 계약 테스트를 실행합니다. 로컬에서도
 | 스택 | Compose 경로 | 용도 | 의존성 |
 | --- | --- | --- | --- |
 | `portainer` | `portainer/docker-compose.yml` | Portainer CE 기반 Swarm 관리 | Synology Docker 볼륨 경로, NFS |
-| `grafana` | `grafana/docker-compose.yml` | Grafana LGTM 기반 관측·모니터링 | NFS |
-| `platform` | `platform/docker-compose.yml` | Config, Eureka, Admin, Gateway | `grafana_default` |
-| `chzzk` | `chzzk/docker-compose.yml` | nyang-nyang-bot | `platform_default`, `grafana_default`, NFS |
-| `barosteel` | `barosteel/docker-compose.yml` | Barosteel 회원·견적·포인트 서비스; [배포 입력값](barosteel/README.md) | `platform_default`, `grafana_default`, 기존 DB 시크릿 |
+| `grafana` | `grafana/docker-compose.yml` | Grafana LGTM 기반 관측·모니터링 | `platform_default`, NFS |
+| `platform` | `platform/docker-compose.yml` | Config, Eureka, Admin, Gateway | 공통 overlay 생성 |
+| `chzzk` | `chzzk/docker-compose.yml` | nyang-nyang-bot | `platform_default`, NFS |
+| `barosteel` | `barosteel/docker-compose.yml` | Barosteel 회원·견적·포인트 서비스; [배포 입력값](barosteel/README.md) | `platform_default`, 기존 DB 시크릿 |
 | `cockroachdb` | `cockroachdb/docker-compose.yml` | 분산 SQL 클러스터 | 노드별 로컬 디스크(NFS 사용 안 함), 매니저 Docker 소켓 |
-| `evergreen` | `evergreen/docker-compose.yml` | 로또·코인 서비스 | `platform_default`, `grafana_default` |
+| `evergreen` | `evergreen/docker-compose.yml` | 로또·코인 서비스 | `platform_default` |
 | `bitwarden` | `bitwarden/docker-compose.yml` | Vaultwarden | NFS |
 | `flame` | `flame/docker-compose.yml` | Flame 대시보드 | NFS |
 | `renovate` | `renovate/docker-compose.yml` | 이미지 태그와 GitHub Actions 의존성을 갱신하는 자체 호스팅 Renovate | 없음 |
@@ -116,7 +116,7 @@ Spring Boot Admin용 Actuator HTTP/JMX 전체 노출 및 접근 허용, probes�
 Config Server 공통 설정과 새 이미지가 먼저 반영되고 Renovate의 태그 갱신이 적용된 뒤 배포해야 합니다.
 현재 선언된 기존 태그가 이 변경을 포함한다는 뜻이 아니며, 그 전에는 변경된 Compose를 배포하지 마세요.
 
-Admin은 `ADMIN_CLUSTER_BIND_HOST=platform_config.platform_default`로 클러스터 통신용 로컬 주소를 선택하고, `ADMIN_CLUSTER_MEMBERS=tasks.platform_admin.platform_default`로 피어를 탐색합니다. 네트워크 이름을 명시해 두 오버레이 중 다른 주소를 선택하는 것을 방지합니다. 아직 healthy한 admin 태스크가 없어도 먼저 기동할 수 있도록 주소 선택과 피어 DNS를 분리했으며, admin 2.11.15 이상이 필요합니다.
+Admin은 `tasks.platform_admin`으로 Hazelcast 피어를 탐색하며, 로컬 주소 선택은 Hazelcast 기본 TCP/IP 로직을 사용합니다. 플랫폼·앱·Grafana는 `platform_default` overlay를 공유합니다.
 
 Lotto도 공통 시작 유예 5분을 상속합니다. 직접 검사 방식과 검사 간격 30초·제한 30초·연속 실패 3회, 업데이트·롤백 감시 5분은 유지합니다. 시작 유예 중 계속 실패하면 unhealthy 판정이 업데이트 감시 종료 이후에 발생할 수 있습니다.
 
@@ -243,11 +243,11 @@ Portainer의 진입점은 `agent`이므로 Docker API 협상 버전은 매니저
 Swarm 태스크가 교체됩니다. 기준 버전 변경을 병합한 뒤 아래 의존 순서에 따라
 스택을 하나씩 재배포·검증하고 폴링을 다시 활성화합니다.
 
-애플리케이션 스택은 앞선 두 스택이 만든 네트워크를 사용하므로 다음 순서로 배포합니다.
+Grafana와 애플리케이션 스택은 플랫폼이 만든 공통 네트워크를 사용하므로 다음 순서로 배포합니다.
 
-1. `portainer`, `grafana`
-2. `platform`
-3. `chzzk`, `evergreen`
+1. `portainer`, `platform`
+2. `grafana`
+3. `barosteel`, `chzzk`, `evergreen`
 4. `bitwarden`, `flame`
 
 ### `spring`에서 `platform`으로 이전
@@ -391,8 +391,7 @@ Git으로 추적하는 Compose 파일에 둡니다.
 - Portainer 기본 오버레이는 VXLAN 트래픽을 Tailscale에 맞추기 위해 MTU `1200`을 사용합니다.
 - 모든 스택 소유 오버레이 네트워크는 MTU `1200`을 사용합니다. 변경된 스택을 재배포하기 전에 기존 네트워크를 다시 생성하세요.
 - 포트를 공개하는 서비스를 배포하기 전에 Swarm `ingress` 네트워크를 MTU `1200`으로 다시 생성합니다.
-- `platform`, `chzzk`, `evergreen`을 배포하기 전에 `grafana_default`가 존재해야 합니다.
-- `chzzk`, `evergreen`을 배포하기 전에 `platform_default`가 존재해야 합니다.
+- `grafana`, `barosteel`, `chzzk`, `evergreen`을 배포하기 전에 `platform` 스택이 생성한 `platform_default`가 존재해야 합니다.
 - 배치 가능한 모든 노드는 `NOW_START`의 Tailscale 주소 `100.100.1.1`에서 NFSv4를 마운트할 수 있어야 합니다.
 - DSM NFS 권한은 Tailscale 클라이언트 대역 `100.64.0.0/10`을 허용해야 합니다.
 - 비공개 이미지를 사용하려면 매니저에서 `ghcr.io` 인증을 완료해야 합니다.
@@ -435,7 +434,6 @@ docker stack config -c portainer/docker-compose.yml >/dev/null
 ```sh
 docker stack services STACK_NAME
 docker stack ps --no-trunc STACK_NAME
-docker network inspect grafana_default
 docker network inspect platform_default
 docker service ps --no-trunc portainer_agent
 ```
@@ -492,3 +490,7 @@ CI 이미지 발행 → Renovate DEV PR → 병합 → Portainer DEV 배포·검
 배지와 측정 SHA는 `jacoco-badge-<module 또는 root>` 산출물에 보관한다. 성공한 최신 main 빌드만 별도의 쓰기 권한 job에서 `coverage` 브랜치를 갱신한다. 루트는 `jacoco.svg`, `jacoco-branches.svg`, `summary.json`, 모듈은 `<module>/` 아래에 저장하며 다른 모듈의 배지는 보존한다. PR은 산출물만 생성한다. 기존 버전 정책으로 build가 생략되면 커버리지도 갱신되지 않는다.
 
 Java 이미지 builder는 AMD64/ARM64가 모두 검증된 `builder-noble-java-tiny:0.0.200`의 index digest로 고정한다. 2026-10-24 확인한 `latest`는 ARM64 단일 manifest여서 AMD64 빌드가 실패했다. builder 갱신 시 두 플랫폼과 실제 이미지 빌드를 함께 확인한다.
+
+### 공통 overlay 전환
+
+전환 절차와 검증 기준은 [공통 overlay 이전 안내](docs/shared-overlay-migration.md)를 따릅니다. 전환 이미지는 Admin 2.11.25, Gateway 6.2.5, Eureka 2.5.8, Barosteel 0.2.13입니다. 중앙 설정과 네트워크를 함께 반영해야 합니다.

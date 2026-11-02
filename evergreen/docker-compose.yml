@@ -27,9 +27,6 @@ x-service-defaults: &service-defaults
   environment: &environment-defaults
     TZ: Asia/Seoul
     SPRING_CONFIG_IMPORT: configserver:http://config:8888
-  networks:
-    - platform_default
-    - grafana_default
   deploy:
     <<: *deploy-defaults
 
@@ -73,7 +70,6 @@ services:
           - node.hostname == NOW_START
 
 networks:
-  platform_default:
+  default:
     external: true
-  grafana_default:
-    external: true
+    name: platform_default

@@ -36,9 +36,6 @@ x-service-defaults: &service-defaults
     THC_PORT: "8081"
     THC_PATH: /actuator/health/readiness
     SPRING_CONFIG_IMPORT: configserver:http://config:8888
-  networks:
-    - default
-    - grafana_default
   deploy:
     <<: *deploy-defaults
     mode: replicated
@@ -64,7 +61,7 @@ services:
 
   eureka:
     <<: *service-defaults
-    image: ghcr.io/now-start/eureka:2.5.6
+    image: ghcr.io/now-start/eureka:2.5.8
     deploy:
       <<: *global-deploy-defaults
       resources:
@@ -75,7 +72,7 @@ services:
 
   admin:
     <<: *service-defaults
-    image: ghcr.io/now-start/admin:2.11.24
+    image: ghcr.io/now-start/admin:2.11.25
     deploy:
       <<: *global-deploy-defaults
       resources:
@@ -89,7 +86,7 @@ services:
 
   gateway:
     <<: *service-defaults
-    image: ghcr.io/now-start/gateway:6.2.4
+    image: ghcr.io/now-start/gateway:6.2.5
     deploy:
       <<: *global-deploy-defaults
       resources:
@@ -109,10 +106,5 @@ services:
 networks:
   default:
     driver: overlay
-    ipam:
-      config:
-        - subnet: 10.0.11.0/24
     driver_opts:
       com.docker.network.driver.mtu: "1200"
-  grafana_default:
-    external: true

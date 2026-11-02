@@ -26,7 +26,7 @@ x-service-defaults: &service-defaults
 
 services:
   barosteel:
-    image: ghcr.io/now-start/barosteel:0.2.11
+    image: ghcr.io/now-start/barosteel:0.2.13
     user: root
     <<: *service-defaults
     environment:
@@ -34,7 +34,6 @@ services:
       THC_PORT: "8081"
       THC_PATH: /actuator/health/readiness
       SPRING_CONFIG_IMPORT: configserver:http://config:8888
-    networks: [default, platform_default, grafana_default]
     healthcheck:
       <<: *healthcheck-defaults
       test: ["CMD", "/workspace/health-check"]
@@ -51,13 +50,5 @@ services:
 
 networks:
   default:
-    driver: overlay
-    ipam:
-      config:
-        - subnet: 10.0.3.0/24
-    driver_opts:
-      com.docker.network.driver.mtu: "1200"
-  platform_default:
     external: true
-  grafana_default:
-    external: true
+    name: platform_default

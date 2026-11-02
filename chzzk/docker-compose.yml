@@ -36,9 +36,6 @@ services:
       SPRING_CONFIG_IMPORT: configserver:http://config:8888
     volumes:
       - chzzk_data:/workspace/key
-    networks:
-      - platform_default
-      - grafana_default
     healthcheck:
       <<: *healthcheck-defaults
       test: ["CMD", "/workspace/health-check"]
@@ -60,7 +57,6 @@ volumes:
       device: :/volume1/docker/chzzk
 
 networks:
-  platform_default:
+  default:
     external: true
-  grafana_default:
-    external: true
+    name: platform_default
