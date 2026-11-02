@@ -72,7 +72,7 @@ services:
 
   admin:
     <<: *service-defaults
-    image: ghcr.io/now-start/admin:2.11.25
+    image: ghcr.io/now-start/admin:2.11.27
     deploy:
       <<: *global-deploy-defaults
       resources:
@@ -86,7 +86,7 @@ services:
 
   gateway:
     <<: *service-defaults
-    image: ghcr.io/now-start/gateway:6.2.5
+    image: ghcr.io/now-start/gateway:6.2.7
     deploy:
       <<: *global-deploy-defaults
       resources:

@@ -6,8 +6,8 @@
 `grafana`, `barosteel`, `chzzk`, `evergreen`은 이 네트워크를 외부 기본 네트워크로 사용한다.
 Portainer·CockroachDB 등 다른 스택은 이번 통합 대상이 아니다.
 
-Admin·Gateway·Barosteel은 CIDR 필터와 `hazelcast.local.localAddress` 강제 지정을 제거하고
-Hazelcast TCP/IP 기본 주소 선택을 사용한다. 멤버 DNS는 각각 `tasks.platform_admin`,
+Admin·Gateway·Barosteel은 CIDR 필터를 제거하고 중앙 설정의 `app.cluster.local-address=${HOSTNAME}`을
+유일한 IPv4로 해석한 뒤 `hazelcast.local.localAddress`에 적용한다. 다른 컨테이너에서 해석되지 않는 호스트명은 광고하지 않는다. 멤버 DNS는 각각 `tasks.platform_admin`,
 `tasks.platform_gateway`, `tasks.barosteel_barosteel`이다. 클러스터 이름·포트 자동 증가 비활성화·
 세션·캐시·백업·종료 정책은 유지한다.
 
@@ -22,7 +22,7 @@ Eureka는 공통 overlay 하나에만 연결해야 하며, healthy 이후 task D
 ## 준비와 적용 순서
 
 1. `platform`과 `barosteel`의 앱 변경을 검증하고 새 버전의 이미지를 발행한다.
-   이번 전환 이미지는 Admin 2.11.25, Gateway 6.2.5, Eureka 2.5.8, Barosteel 0.2.13이며 Config는 2.1.25를 유지한다.
+   이번 전환 이미지는 Admin 2.11.27, Gateway 6.2.7, Eureka 2.5.8, Barosteel 0.2.15이며 Config는 2.1.25를 유지한다.
 2. 대상 스택의 GitOps 자동 동기화를 잠시 중단하고 기존 Compose·이미지 digest·중앙 설정 revision·
    네트워크 subnet/MTU와 연결 서비스를 기록한다. Config Server는 Git의 중앙 설정을 읽으므로
    중앙 설정 공개와 앱 전환도 같은 작업 창에서 조율한다.
@@ -42,8 +42,8 @@ Eureka는 공통 overlay 하나에만 연결해야 하며, healthy 이후 task D
 - 서비스별 네트워크 연결이 `platform_default`인지, 생성된 네트워크 MTU가 1200인지 확인한다.
 - Config 접근과 Grafana OTLP 데이터 수신, Gateway의 서비스 라우팅을 확인한다.
 - Hazelcast의 서비스별 replica가 동일한 클러스터에 합류하고 다른 서비스와 섞이지 않는지 확인한다.
-  DNS 응답에 자기 task IP가 없는 경우 Hazelcast가 다른 non-loopback 주소로 대체할 수 있으므로
-  실제 bind 주소와 멤버 목록을 확인한다. overlay 하나가 컨테이너 인터페이스 하나를 뜻하지는 않는다.
+  healthy 이전 task DNS가 비면 기본 주소 선택이 docker_gwbridge 주소를 광고할 수 있어 hostname을 지정한다.
+  실제 bind 주소와 멤버 목록이 overlay IP인지 확인한다. overlay 하나가 컨테이너 인터페이스 하나를 뜻하지는 않는다.
 - Eureka를 처음 배포할 때 Docker hostname으로 기동하고 healthy 이후 task DNS에 자기 IP가 나타나는지 확인한다.
 - Eureka replica 교체·증감 시 피어 목록과 등록 URL이 실제 task IP로 갱신되는지 확인한다.
 - Barosteel·Gateway 롤링 배포 후 세션 공유와 로그인 흐름을 확인한다.

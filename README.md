@@ -116,7 +116,7 @@ Spring Boot Admin용 Actuator HTTP/JMX 전체 노출 및 접근 허용, probes�
 Config Server 공통 설정과 새 이미지가 먼저 반영되고 Renovate의 태그 갱신이 적용된 뒤 배포해야 합니다.
 현재 선언된 기존 태그가 이 변경을 포함한다는 뜻이 아니며, 그 전에는 변경된 Compose를 배포하지 마세요.
 
-Admin은 `tasks.platform_admin`으로 Hazelcast 피어를 탐색하며, 로컬 주소 선택은 Hazelcast 기본 TCP/IP 로직을 사용합니다. 플랫폼·앱·Grafana는 `platform_default` overlay를 공유합니다.
+Admin은 `tasks.platform_admin`으로 Hazelcast 피어를 탐색하며, 중앙 설정의 `app.cluster.local-address=${HOSTNAME}`으로 Docker 호스트명의 overlay 주소를 사용합니다. 플랫폼·앱·Grafana는 `platform_default` overlay를 공유합니다.
 
 Lotto도 공통 시작 유예 5분을 상속합니다. 직접 검사 방식과 검사 간격 30초·제한 30초·연속 실패 3회, 업데이트·롤백 감시 5분은 유지합니다. 시작 유예 중 계속 실패하면 unhealthy 판정이 업데이트 감시 종료 이후에 발생할 수 있습니다.
 
@@ -493,4 +493,4 @@ Java 이미지 builder는 AMD64/ARM64가 모두 검증된 `builder-noble-java-ti
 
 ### 공통 overlay 전환
 
-전환 절차와 검증 기준은 [공통 overlay 이전 안내](docs/shared-overlay-migration.md)를 따릅니다. 전환 이미지는 Admin 2.11.25, Gateway 6.2.5, Eureka 2.5.8, Barosteel 0.2.13입니다. 중앙 설정과 네트워크를 함께 반영해야 합니다.
+전환 절차와 검증 기준은 [공통 overlay 이전 안내](docs/shared-overlay-migration.md)를 따릅니다. 전환 이미지는 Admin 2.11.27, Gateway 6.2.7, Eureka 2.5.8, Barosteel 0.2.15입니다. 중앙 설정과 네트워크를 함께 반영해야 합니다.
