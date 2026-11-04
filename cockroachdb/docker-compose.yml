@@ -127,7 +127,7 @@ services:
 
   decommissioner:
     <<: *service-defaults
-    image: docker:29.9.2-cli
+    image: docker:29.9.3-cli
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
