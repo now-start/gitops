@@ -86,7 +86,7 @@ services:
 
   gateway:
     <<: *service-defaults
-    image: ghcr.io/now-start/gateway:6.2.7
+    image: ghcr.io/now-start/gateway:6.2.8
     deploy:
       <<: *global-deploy-defaults
       resources:
