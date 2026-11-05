@@ -51,7 +51,7 @@ services:
         limits:
           memory: 1G
         reservations:
-          memory: 1G
+          memory: 0.75G
     environment:
       TZ: Asia/Seoul
       THC_PORT: "8081"
@@ -68,7 +68,7 @@ services:
         limits:
           memory: 1G
         reservations:
-          memory: 1G
+          memory: 0.55G
 
   admin:
     <<: *service-defaults
@@ -79,7 +79,7 @@ services:
         limits:
           memory: 1.5G
         reservations:
-          memory: 1.5G
+          memory: 1.15G
     environment:
       <<: *environment-defaults
       JAVA_TOOL_OPTIONS: -XX:MaxDirectMemorySize=256m
@@ -93,7 +93,7 @@ services:
         limits:
           memory: 2G
         reservations:
-          memory: 2G
+          memory: 0.9G
     ports:
       - target: 8000
         published: 8000

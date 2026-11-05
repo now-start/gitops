@@ -54,7 +54,7 @@ services:
         limits:
           memory: 0.25G
         reservations:
-          memory: 0.25G
+          memory: 0.2G
 
 networks:
   default:

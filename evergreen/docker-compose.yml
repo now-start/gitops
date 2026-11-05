@@ -62,9 +62,9 @@ services:
       replicas: 1
       resources:
         limits:
-          memory: 0.5G
+          memory: 0.4G
         reservations:
-          memory: 0.5G
+          memory: 0.25G
       placement:
         constraints:
           - node.hostname == NOW_START
