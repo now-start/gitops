@@ -24,6 +24,9 @@ x-healthcheck-defaults: &healthcheck-defaults
 x-global-deploy-defaults: &global-deploy-defaults
   <<: *deploy-defaults
   mode: global
+  placement:
+    constraints:
+      - node.role == manager
 
 x-service-defaults: &service-defaults
   user: root
