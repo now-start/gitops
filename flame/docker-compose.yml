@@ -47,9 +47,17 @@ services:
           "-e",
           "require('http').get('http://127.0.0.1:5005/', response => process.exit(response.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))",
         ]
+    networks:
+      - default
+      - edge
     deploy:
       <<: *deploy-defaults
       replicas: 1
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.flame.rule=Host(`flame.nowstart.org`)
+        - traefik.http.routers.flame.entrypoints=web
+        - traefik.http.services.flame.loadbalancer.server.port=5005
       resources:
         limits:
           memory: 0.25G
@@ -61,6 +69,10 @@ networks:
     driver: overlay
     driver_opts:
       com.docker.network.driver.mtu: "1200"
+  # edge 스택이 생성하는 공개 서비스용 overlay. Traefik이 이 네트워크로 연결한다.
+  edge:
+    external: true
+    name: edge_public
 
 volumes:
   flame_data:

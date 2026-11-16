@@ -79,6 +79,14 @@ services:
     deploy:
       <<: *deploy-defaults
       replicas: 1
+      # portainer 스택은 edge보다 먼저 수동 배포하므로 edge_public에 의존하지 않는다.
+      # edge 스택의 Traefik이 portainer_default로 연결하며, 내부 HTTP 포트 9000을 사용한다.
+      labels:
+        - traefik.enable=true
+        - traefik.swarm.network=portainer_default
+        - traefik.http.routers.portainer.rule=Host(`portainer.nowstart.org`)
+        - traefik.http.routers.portainer.entrypoints=web
+        - traefik.http.services.portainer.loadbalancer.server.port=9000
       resources:
         limits:
           memory: 0.25G

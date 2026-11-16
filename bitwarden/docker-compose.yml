@@ -47,9 +47,17 @@ services:
     healthcheck:
       <<: *healthcheck-defaults
       test: ["CMD", "/healthcheck.sh"]
+    networks:
+      - default
+      - edge
     deploy:
       <<: *deploy-defaults
       replicas: 1
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.bitwarden.rule=Host(`bitwarden.nowstart.org`)
+        - traefik.http.routers.bitwarden.entrypoints=web
+        - traefik.http.services.bitwarden.loadbalancer.server.port=80
       resources:
         limits:
           memory: 0.25G
@@ -61,6 +69,10 @@ networks:
     driver: overlay
     driver_opts:
       com.docker.network.driver.mtu: "1200"
+  # edge 스택이 생성하는 공개 서비스용 overlay. Traefik이 이 네트워크로 연결한다.
+  edge:
+    external: true
+    name: edge_public
 
 volumes:
   bitwarden_data:

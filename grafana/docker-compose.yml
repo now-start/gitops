@@ -67,6 +67,13 @@ services:
     deploy:
       <<: *deploy-defaults
       replicas: 1
+      # edge 스택의 Traefik이 platform_default로 연결한다.
+      labels:
+        - traefik.enable=true
+        - traefik.swarm.network=platform_default
+        - traefik.http.routers.grafana.rule=Host(`grafana.nowstart.org`)
+        - traefik.http.routers.grafana.entrypoints=web
+        - traefik.http.services.grafana.loadbalancer.server.port=3000
       resources:
         limits:
           memory: 2.5G

@@ -35,10 +35,10 @@ actionlint와 기존 Bats 계약 테스트를 실행합니다. 로컬에서도
 | `barosteel` | `barosteel/docker-compose.yml` | Barosteel 회원·견적·포인트 서비스; [배포 입력값](barosteel/README.md) | `platform_default`, 기존 DB 시크릿 |
 | `cockroachdb` | `cockroachdb/docker-compose.yml` | 분산 SQL 클러스터 | 노드별 로컬 디스크(NFS 사용 안 함), 매니저 Docker 소켓 |
 | `postgres` | `postgres/docker-compose.yml` | Patroni 기반 PostgreSQL 18 고가용성 클러스터와 pgAdmin | `platform_default`, 노드별 로컬 디스크(NFS 사용 안 함) |
-| `edge` | `edge/docker-compose.yml` | Cloudflare Tunnel 커넥터와 Traefik 내부 라우터 | `platform_default`, Cloudflare 원격 관리 터널, 매니저 Docker 소켓 |
+| `edge` | `edge/docker-compose.yml` | Cloudflare Tunnel 커넥터, Traefik 내부 라우터, 조회 전용 Docker API 프록시 | `platform_default`, `portainer_default`, Cloudflare 원격 관리 터널, 매니저 Docker 소켓; `edge_public` 생성 |
 | `evergreen` | `evergreen/docker-compose.yml` | 로또·코인 서비스 | `platform_default` |
-| `bitwarden` | `bitwarden/docker-compose.yml` | Vaultwarden | NFS |
-| `flame` | `flame/docker-compose.yml` | Flame 대시보드 | NFS |
+| `bitwarden` | `bitwarden/docker-compose.yml` | Vaultwarden | `edge_public`, NFS |
+| `flame` | `flame/docker-compose.yml` | Flame 대시보드 | `edge_public`, NFS |
 | `renovate` | `renovate/docker-compose.yml` | 이미지 태그와 GitHub Actions 의존성을 갱신하는 자체 호스팅 Renovate | 없음 |
 
 ## 새 스택 템플릿
@@ -278,54 +278,98 @@ pgAdmin은 `NOW_START`가 아닌 매니저에 배치하고 5050 포트를 host �
 
 ### Cloudflare Tunnel과 Traefik
 
-`edge` 스택은 Cloudflare Tunnel 커넥터(`cloudflared`)와 클러스터 내부 라우터(Traefik)를 매니저마다 하나씩
-실행합니다. 커넥터가 Cloudflare로 바깥 방향 연결을 만들므로 공유기 포트포워딩·DDNS 없이 외부 요청을 받고,
-매니저 하나가 중단되어도 남은 커넥터로 요청이 들어옵니다. 두 서비스 모두 포트를 공개하지 않으며
-`platform_default`에 연결합니다.
+`edge` 스택은 Cloudflare Tunnel 커넥터(`cloudflared`), 클러스터 내부 라우터(Traefik),
+Traefik 전용 Docker API 프록시(`socket-proxy`)를 매니저마다 하나씩 실행합니다.
+커넥터가 Cloudflare로 바깥 방향 연결을 만들므로 공유기 포트포워딩·DDNS 없이 외부 요청을 받고,
+매니저 하나가 중단되어도 남은 커넥터로 요청이 들어옵니다. 세 서비스 모두 포트를 공개하지 않습니다.
 
 ```text
-사용자 → Cloudflare 엣지(TLS) → cloudflared(매니저마다) → Traefik(매니저마다) → 서비스
+사용자 → Cloudflare 엣지(TLS) → cloudflared → Traefik → 서비스
+                                  (edge_public)   │
+                                                  ├─ edge_public: bitwarden, flame, 이후 추가 서비스
+                                                  ├─ platform_default: platform_gateway, grafana
+                                                  ├─ portainer_default: portainer
+                                                  └─ edge_socket(내부 전용): socket-proxy → 매니저 Docker 소켓
 ```
+
+| 네트워크 | 연결 대상 | 용도 |
+| --- | --- | --- |
+| `edge_public` | cloudflared, Traefik, `edge` 뒤에 배포하는 공개 서비스 | 공개 서비스용. `edge` 스택이 이름을 고정해 생성 |
+| `edge_socket` | Traefik, socket-proxy | 외부 연결이 없는 내부 전용 overlay |
+| `platform_default`, `portainer_default` | Traefik | `edge`보다 먼저 배포되는 기반 스택의 서비스 연결용 |
+
+- cloudflared는 `edge_public`에만 연결합니다. 데이터베이스 등 공개하지 않는 서비스에는 닿지 않습니다.
+- Traefik은 Docker 소켓을 직접 마운트하지 않습니다. 소켓의 `:ro` 마운트는 API 쓰기 호출을 막지 못하므로,
+  socket-proxy가 `GET`·`HEAD`만 통과시키고 Traefik swarm provider가 쓰는 버전·서비스·태스크·네트워크·노드
+  조회만 허용합니다.
+- `portainer`는 모든 스택보다 먼저 수동 배포하고, `platform`은 공통 overlay를 만들므로 두 스택은
+  `edge_public`에 의존하지 않습니다. 대신 Traefik이 두 스택의 네트워크에 연결합니다.
+  그 외 공개 서비스는 `edge_public`에 연결합니다.
 
 처음 설정은 다음 순서로 진행합니다.
 
 1. Cloudflare 대시보드 Networking → Tunnels에서 원격 관리 터널을 만들고, 설치 명령의 `--token` 뒤
    문자열을 `CLOUDFLARE_TUNNEL_TOKEN`에 넣습니다. 이미 사용 중인 터널의 토큰을 재사용해도 됩니다.
-2. `edge` 스택을 배포한 뒤 터널 화면에서 커넥터가 매니저 수만큼 연결됐는지 확인합니다.
-3. 같은 터널로 수동 생성한 임시 `cloudflared` 서비스가 있다면 `docker service rm cloudflared`로 제거합니다.
+2. `portainer_default`, `platform_default`가 있는 상태에서 `edge` 스택을 배포하고,
+   터널 화면에서 커넥터가 매니저 수만큼 연결됐는지 확인합니다.
+3. 터널 route는 `*.nowstart.org` → `HTTP` / `edge_traefik:80` 하나만 둡니다.
+   호스트별 개별 route는 지우고 Traefik 라벨로 옮깁니다.
+4. 같은 터널로 수동 생성한 임시 `cloudflared` 서비스가 있다면 `docker service rm cloudflared`로 제거합니다.
+   임시 커넥터는 `edge_public`에 없어 Traefik에 닿지 못하므로 route를 바꾼 직후 제거합니다.
 
-터널 route는 Cloudflare 대시보드에서 호스트 이름별로 지정합니다. 최종적으로는
-`*.nowstart.org` → `http://traefik:80` 하나만 두고 서비스별 라우팅은 Traefik 라벨로 관리합니다.
-와일드카드를 터널로 돌리기 전에 다음을 확인합니다.
+와일드카드 DNS는 다음을 확인합니다.
 
-- `mail.nowstart.org`처럼 터널로 보낼 수 없는 이름은 DNS 전용 명시적 레코드로 둡니다.
-  명시적 레코드는 와일드카드보다 우선합니다.
-- 와일드카드 DNS 레코드(`*`)는 대시보드가 자동으로 바꾸지 않을 수 있으므로 터널 대상으로 직접 수정합니다.
-- 같은 터널에 개별 route와 와일드카드 route를 함께 두면 순서에 따라 결과가 달라질 수 있습니다.
-  개별 route는 Traefik 라벨로 옮긴 뒤 정리합니다.
+- 명시적 DNS 레코드는 와일드카드보다 우선합니다. 터널로 옮길 이름(`bitwarden`, `grafana`, `flame`,
+  `portainer` 등)에 DDNS 주소를 가리키는 기존 A·CNAME 레코드가 있으면 지우거나 터널 대상 CNAME으로 바꿉니다.
+- `mail`, `sso`, DSM·Photos 등 Synology 앱처럼 터널 Traefik으로 보내지 않을 이름은 명시적 레코드로 남깁니다.
+- 기존 와일드카드 레코드(`*`)가 있으면 대시보드가 자동으로 바꾸지 않을 수 있으므로 터널 대상으로 직접 수정합니다.
+- 라벨이 없는 이름으로 들어온 요청은 Traefik이 `404`로 응답합니다.
 
-공개할 서비스는 `platform_default`에 연결하고 `deploy.labels`에 라벨을 답니다. 컨테이너 `labels`가 아닙니다.
-라벨을 단 서비스는 곧바로 인터넷에 공개됩니다.
+현재 Traefik으로 공개하는 서비스는 다음과 같습니다.
+
+| 호스트 | 서비스 | Traefik 연결 네트워크 | 컨테이너 포트 |
+| --- | --- | --- | --- |
+| `spring.nowstart.org` | `platform_gateway` | `platform_default` | `8000` |
+| `grafana.nowstart.org` | `grafana_grafana` | `platform_default` | `3000` |
+| `portainer.nowstart.org` | `portainer_portainer` | `portainer_default` | `9000`(HTTP) |
+| `bitwarden.nowstart.org` | `bitwarden_bitwarden` | `edge_public` | `80` |
+| `flame.nowstart.org` | `flame_flame` | `edge_public` | `5005` |
+
+새로 공개할 서비스는 `edge_public`을 external 네트워크로 추가하고 `deploy.labels`에 라벨을 답니다.
+컨테이너 `labels`가 아닙니다. 라벨을 단 서비스는 곧바로 인터넷에 공개되며, 라우터·서비스 이름은
+모든 스택에서 겹치지 않아야 합니다.
 
 ```yaml
-deploy:
-  labels:
-    - traefik.enable=true
-    - traefik.http.routers.app.rule=Host(`app.nowstart.org`)
-    - traefik.http.routers.app.entrypoints=web
-    - traefik.http.services.app.loadbalancer.server.port=8080
+services:
+  app:
+    networks:
+      - default
+      - edge
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.app.rule=Host(`app.nowstart.org`)
+        - traefik.http.routers.app.entrypoints=web
+        - traefik.http.services.app.loadbalancer.server.port=8080
+
+networks:
+  edge:
+    external: true
+    name: edge_public
 ```
 
 `loadbalancer.server.port`는 컨테이너 내부 포트입니다. Traefik이 overlay로 직접 연결하므로
 Traefik으로만 공개하는 서비스에는 `ports`가 필요 없습니다. 기존 DSM 리버스 프록시가 사용하는
-공개 포트는 해당 도메인을 터널로 옮긴 뒤 제거합니다.
+공개 포트는 해당 도메인이 터널로 정상 동작하는 것을 확인한 뒤 제거합니다.
+`deploy.labels`만 바꾸면 태스크는 재시작되지 않지만, 네트워크를 추가하면 태스크가 다시 생성됩니다.
 
 - 방문자 쪽 TLS는 Cloudflare Universal SSL이 처리하며 한 단계 서브도메인(`*.nowstart.org`)까지만 적용됩니다.
 - Traefik은 `10.0.0.0/8`에서 온 `X-Forwarded-*`를 신뢰하므로 앱에 `X-Forwarded-Proto: https`가 전달됩니다.
   실제 클라이언트 IP는 `CF-Connecting-IP` 헤더로 받습니다.
+- Traefik은 `web` 진입점에서 다른 헤더 이름의 별칭(`X_Forwarded_For` 등)으로 온 헤더를 지워 위조를 막습니다.
 - Cloudflare 무료 플랜은 요청 본문을 100MB로 제한합니다.
 - Portainer·pgAdmin 같은 관리 화면은 Cloudflare Access 등 인증을 앞에 두고 공개합니다.
-- Traefik은 ping 상태 검사를 사용하며 healthy 태스크만 요청을 받습니다.
+- Traefik과 socket-proxy는 상태 검사를 사용하며 healthy 태스크만 요청을 받습니다.
   cloudflared는 이미지에 셸과 검사 도구가 없어 상태 검사를 두지 않습니다.
 
 ### Compose 경로 이전
@@ -358,7 +402,8 @@ Portainer의 진입점은 `agent`이므로 Docker API 협상 버전은 매니저
 Swarm 태스크가 교체됩니다. 기준 버전 변경을 병합한 뒤 아래 의존 순서에 따라
 스택을 하나씩 재배포·검증하고 폴링을 다시 활성화합니다.
 
-Grafana와 애플리케이션 스택은 플랫폼이 만든 공통 네트워크를 사용하므로 다음 순서로 배포합니다.
+Grafana와 애플리케이션 스택은 플랫폼이 만든 공통 네트워크를 사용하고, `edge`는 `portainer`·`platform`의
+네트워크를, `bitwarden`·`flame`은 `edge`가 만든 `edge_public`을 사용하므로 다음 순서로 배포합니다.
 
 1. `portainer`, `platform`
 2. `grafana`, `postgres`, `edge`
@@ -511,6 +556,8 @@ Git으로 추적하는 Compose 파일에 둡니다.
 - 모든 스택 소유 오버레이 네트워크는 MTU `1200`을 사용합니다. 변경된 스택을 재배포하기 전에 기존 네트워크를 다시 생성하세요.
 - 포트를 공개하는 서비스를 배포하기 전에 Swarm `ingress` 네트워크를 MTU `1200`으로 다시 생성합니다.
 - `grafana`, `postgres`, `edge`, `barosteel`, `chzzk`, `evergreen`을 배포하기 전에 `platform` 스택이 생성한 `platform_default`가 존재해야 합니다.
+- `edge`를 배포하기 전에 `portainer` 스택이 생성한 `portainer_default`도 존재해야 합니다.
+- `bitwarden`, `flame`을 배포하기 전에 `edge` 스택이 생성한 `edge_public`이 존재해야 합니다.
 - 배치 가능한 모든 노드는 `NOW_START`의 Tailscale 주소 `100.100.1.1`에서 NFSv4를 마운트할 수 있어야 합니다.
 - DSM NFS 권한은 Tailscale 클라이언트 대역 `100.64.0.0/10`을 허용해야 합니다.
 - 비공개 이미지를 사용하려면 매니저에서 `ghcr.io` 인증을 완료해야 합니다.

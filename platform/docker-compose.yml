@@ -92,6 +92,13 @@ services:
     image: ghcr.io/now-start/gateway:6.2.8
     deploy:
       <<: *global-deploy-defaults
+      # edge 스택의 Traefik이 platform_default로 연결한다. 서비스 라벨만 바뀌면 태스크는 재시작되지 않는다.
+      labels:
+        - traefik.enable=true
+        - traefik.swarm.network=platform_default
+        - traefik.http.routers.platform-gateway.rule=Host(`spring.nowstart.org`)
+        - traefik.http.routers.platform-gateway.entrypoints=web
+        - traefik.http.services.platform-gateway.loadbalancer.server.port=8000
       resources:
         limits:
           memory: 2G
