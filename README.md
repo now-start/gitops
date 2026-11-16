@@ -35,6 +35,7 @@ actionlint와 기존 Bats 계약 테스트를 실행합니다. 로컬에서도
 | `barosteel` | `barosteel/docker-compose.yml` | Barosteel 회원·견적·포인트 서비스; [배포 입력값](barosteel/README.md) | `platform_default`, 기존 DB 시크릿 |
 | `cockroachdb` | `cockroachdb/docker-compose.yml` | 분산 SQL 클러스터 | 노드별 로컬 디스크(NFS 사용 안 함), 매니저 Docker 소켓 |
 | `postgres` | `postgres/docker-compose.yml` | Patroni 기반 PostgreSQL 18 고가용성 클러스터와 pgAdmin | `platform_default`, 노드별 로컬 디스크(NFS 사용 안 함) |
+| `edge` | `edge/docker-compose.yml` | Cloudflare Tunnel 커넥터와 Traefik 내부 라우터 | `platform_default`, Cloudflare 원격 관리 터널, 매니저 Docker 소켓 |
 | `evergreen` | `evergreen/docker-compose.yml` | 로또·코인 서비스 | `platform_default` |
 | `bitwarden` | `bitwarden/docker-compose.yml` | Vaultwarden | NFS |
 | `flame` | `flame/docker-compose.yml` | Flame 대시보드 | NFS |
@@ -149,7 +150,7 @@ Lotto도 공통 시작 유예 5분을 상속합니다. 직접 검사 방식과 �
 암호화된 Config Server 설정이 필요합니다.
 [배포 안내](barosteel/README.md)를 참고하세요.
 
-1. `grafana`, `platform`, `chzzk`, `cockroachdb`, `postgres`, `evergreen`,
+1. `grafana`, `platform`, `chzzk`, `cockroachdb`, `postgres`, `edge`, `evergreen`,
    `bitwarden`, `flame`을 Git 연동 스택으로 생성합니다.
    `portainer` 스택은 자체 업데이트 실패로 관리 기능까지 중단되지 않도록
    수동으로 관리합니다.
@@ -275,6 +276,58 @@ pgAdmin은 `NOW_START`가 아닌 매니저에 배치하고 5050 포트를 host �
 - PostgreSQL 메이저 버전 변경은 `pg_upgrade`가 필요하므로 이미지 교체만으로 진행하지 않습니다.
 - etcd 멤버 영구 교체(`etcdctl member remove/add`)는 수동으로 진행합니다.
 
+### Cloudflare Tunnel과 Traefik
+
+`edge` 스택은 Cloudflare Tunnel 커넥터(`cloudflared`)와 클러스터 내부 라우터(Traefik)를 매니저마다 하나씩
+실행합니다. 커넥터가 Cloudflare로 바깥 방향 연결을 만들므로 공유기 포트포워딩·DDNS 없이 외부 요청을 받고,
+매니저 하나가 중단되어도 남은 커넥터로 요청이 들어옵니다. 두 서비스 모두 포트를 공개하지 않으며
+`platform_default`에 연결합니다.
+
+```text
+사용자 → Cloudflare 엣지(TLS) → cloudflared(매니저마다) → Traefik(매니저마다) → 서비스
+```
+
+처음 설정은 다음 순서로 진행합니다.
+
+1. Cloudflare 대시보드 Networking → Tunnels에서 원격 관리 터널을 만들고, 설치 명령의 `--token` 뒤
+   문자열을 `CLOUDFLARE_TUNNEL_TOKEN`에 넣습니다. 이미 사용 중인 터널의 토큰을 재사용해도 됩니다.
+2. `edge` 스택을 배포한 뒤 터널 화면에서 커넥터가 매니저 수만큼 연결됐는지 확인합니다.
+3. 같은 터널로 수동 생성한 임시 `cloudflared` 서비스가 있다면 `docker service rm cloudflared`로 제거합니다.
+
+터널 route는 Cloudflare 대시보드에서 호스트 이름별로 지정합니다. 최종적으로는
+`*.nowstart.org` → `http://traefik:80` 하나만 두고 서비스별 라우팅은 Traefik 라벨로 관리합니다.
+와일드카드를 터널로 돌리기 전에 다음을 확인합니다.
+
+- `mail.nowstart.org`처럼 터널로 보낼 수 없는 이름은 DNS 전용 명시적 레코드로 둡니다.
+  명시적 레코드는 와일드카드보다 우선합니다.
+- 와일드카드 DNS 레코드(`*`)는 대시보드가 자동으로 바꾸지 않을 수 있으므로 터널 대상으로 직접 수정합니다.
+- 같은 터널에 개별 route와 와일드카드 route를 함께 두면 순서에 따라 결과가 달라질 수 있습니다.
+  개별 route는 Traefik 라벨로 옮긴 뒤 정리합니다.
+
+공개할 서비스는 `platform_default`에 연결하고 `deploy.labels`에 라벨을 답니다. 컨테이너 `labels`가 아닙니다.
+라벨을 단 서비스는 곧바로 인터넷에 공개됩니다.
+
+```yaml
+deploy:
+  labels:
+    - traefik.enable=true
+    - traefik.http.routers.app.rule=Host(`app.nowstart.org`)
+    - traefik.http.routers.app.entrypoints=web
+    - traefik.http.services.app.loadbalancer.server.port=8080
+```
+
+`loadbalancer.server.port`는 컨테이너 내부 포트입니다. Traefik이 overlay로 직접 연결하므로
+Traefik으로만 공개하는 서비스에는 `ports`가 필요 없습니다. 기존 DSM 리버스 프록시가 사용하는
+공개 포트는 해당 도메인을 터널로 옮긴 뒤 제거합니다.
+
+- 방문자 쪽 TLS는 Cloudflare Universal SSL이 처리하며 한 단계 서브도메인(`*.nowstart.org`)까지만 적용됩니다.
+- Traefik은 `10.0.0.0/8`에서 온 `X-Forwarded-*`를 신뢰하므로 앱에 `X-Forwarded-Proto: https`가 전달됩니다.
+  실제 클라이언트 IP는 `CF-Connecting-IP` 헤더로 받습니다.
+- Cloudflare 무료 플랜은 요청 본문을 100MB로 제한합니다.
+- Portainer·pgAdmin 같은 관리 화면은 Cloudflare Access 등 인증을 앞에 두고 공개합니다.
+- Traefik은 ping 상태 검사를 사용하며 healthy 태스크만 요청을 받습니다.
+  cloudflared는 이미지에 셸과 검사 도구가 없어 상태 검사를 두지 않습니다.
+
 ### Compose 경로 이전
 
 이 저장소의 모든 스택과 템플릿은 `docker-compose.yml`을 사용합니다.
@@ -308,7 +361,7 @@ Swarm 태스크가 교체됩니다. 기준 버전 변경을 병합한 뒤 아래
 Grafana와 애플리케이션 스택은 플랫폼이 만든 공통 네트워크를 사용하므로 다음 순서로 배포합니다.
 
 1. `portainer`, `platform`
-2. `grafana`, `postgres`
+2. `grafana`, `postgres`, `edge`
 3. `barosteel`, `chzzk`, `evergreen`
 4. `bitwarden`, `flame`
 
@@ -442,6 +495,7 @@ Renovate가 같은 버전을 즉시 다시 제안하지 않도록 커밋을 되�
 | `flame` | `FLAME_PASSWORD` |
 | `renovate` | `RENOVATE_TOKEN` |
 | `postgres` | `POSTGRES_SUPERUSER_PASSWORD`, `POSTGRES_STANDBY_PASSWORD`, `POSTGRES_ADMIN_PASSWORD`, `PGADMIN_EMAIL`, `PGADMIN_PASSWORD` |
+| `edge` | `CLOUDFLARE_TUNNEL_TOKEN` |
 
 `.env.example` 템플릿에는 시크릿 변수 이름만 기록합니다.
 실제 `.env` 파일에는 시크릿만 담고 Git 추적에서 제외하며, 값은 Portainer에서 관리합니다.
@@ -456,7 +510,7 @@ Git으로 추적하는 Compose 파일에 둡니다.
 - Portainer 기본 오버레이는 VXLAN 트래픽을 Tailscale에 맞추기 위해 MTU `1200`을 사용합니다.
 - 모든 스택 소유 오버레이 네트워크는 MTU `1200`을 사용합니다. 변경된 스택을 재배포하기 전에 기존 네트워크를 다시 생성하세요.
 - 포트를 공개하는 서비스를 배포하기 전에 Swarm `ingress` 네트워크를 MTU `1200`으로 다시 생성합니다.
-- `grafana`, `postgres`, `barosteel`, `chzzk`, `evergreen`을 배포하기 전에 `platform` 스택이 생성한 `platform_default`가 존재해야 합니다.
+- `grafana`, `postgres`, `edge`, `barosteel`, `chzzk`, `evergreen`을 배포하기 전에 `platform` 스택이 생성한 `platform_default`가 존재해야 합니다.
 - 배치 가능한 모든 노드는 `NOW_START`의 Tailscale 주소 `100.100.1.1`에서 NFSv4를 마운트할 수 있어야 합니다.
 - DSM NFS 권한은 Tailscale 클라이언트 대역 `100.64.0.0/10`을 허용해야 합니다.
 - 비공개 이미지를 사용하려면 매니저에서 `ghcr.io` 인증을 완료해야 합니다.
@@ -497,6 +551,8 @@ docker stack config -c portainer/docker-compose.yml >/dev/null
 POSTGRES_SUPERUSER_PASSWORD=test POSTGRES_STANDBY_PASSWORD=test \
 POSTGRES_ADMIN_PASSWORD=test PGADMIN_EMAIL=test@example.com PGADMIN_PASSWORD=test \
   docker stack config -c postgres/docker-compose.yml >/dev/null
+
+CLOUDFLARE_TUNNEL_TOKEN=test docker stack config -c edge/docker-compose.yml >/dev/null
 ```
 
 배포 후 실제 스케줄러와 네트워크 상태를 확인합니다.

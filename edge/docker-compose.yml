@@ -1,0 +1,92 @@
+x-deploy-defaults: &deploy-defaults
+  update_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: rollback
+    monitor: 5m
+    delay: 10s
+  rollback_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: pause
+    monitor: 5m
+    delay: 10s
+  restart_policy:
+    condition: any
+    delay: 5s
+
+x-service-defaults: &service-defaults
+  stop_grace_period: 5m
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 30s
+  retries: 3
+  start_period: 5m
+
+services:
+  # Cloudflare Tunnel 커넥터. 매니저마다 Cloudflare로 바깥 방향 연결을 만들어
+  # 공유기 포트포워딩·DDNS 없이 외부 요청을 받는다. 호스트별 라우팅은
+  # Cloudflare 대시보드의 원격 관리 터널 설정이 모든 커넥터에 내려준다.
+  # 이미지에 셸과 검사 도구가 없어 상태 검사를 두지 않는다.
+  cloudflared:
+    <<: *service-defaults
+    image: cloudflare/cloudflared:2026.10.7
+    command: tunnel --no-autoupdate run
+    environment:
+      TZ: Asia/Seoul
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}
+    deploy:
+      <<: *deploy-defaults
+      mode: global
+      resources:
+        limits:
+          memory: 0.25G
+        reservations:
+          memory: 0.1G
+      placement:
+        constraints:
+          - node.role == manager
+
+  # 클러스터 내부 라우터. 서비스의 deploy.labels를 읽어 Host별로 전달한다.
+  # TLS는 Cloudflare 엣지에서 끝나므로 내부는 HTTP(:80)만 받고 포트를 공개하지 않는다.
+  # Swarm API를 읽어야 하므로 매니저에서만 실행하며 Docker 소켓은 읽기 전용이다.
+  # X-Forwarded-*는 Swarm overlay 기본 대역(10.0.0.0/8)에서 온 요청만 신뢰한다.
+  traefik:
+    <<: *service-defaults
+    image: traefik:v3.7.16
+    command:
+      - --global.checkNewVersion=false
+      - --global.sendAnonymousUsage=false
+      - --providers.swarm.endpoint=unix:///var/run/docker.sock
+      - --providers.swarm.exposedByDefault=false
+      - --providers.swarm.network=platform_default
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.forwardedHeaders.trustedIPs=10.0.0.0/8
+      - --ping=true
+      - --log.level=INFO
+      - --accesslog=true
+    environment:
+      TZ: Asia/Seoul
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+    deploy:
+      <<: *deploy-defaults
+      mode: global
+      resources:
+        limits:
+          memory: 0.25G
+        reservations:
+          memory: 0.1G
+      placement:
+        constraints:
+          - node.role == manager
+
+# 앱 서비스와 같은 공통 overlay를 쓴다. 공개할 서비스는 이 네트워크에 연결한다.
+networks:
+  default:
+    external: true
+    name: platform_default

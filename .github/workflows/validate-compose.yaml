@@ -20,6 +20,7 @@ jobs:
     env:
       # Syntax validation only; no image pull, secret creation, or deployment.
       BITWARDEN_SSO_CLIENT_SECRET: test
+      CLOUDFLARE_TUNNEL_TOKEN: test
       FLAME_PASSWORD: test
       GRAFANA_OAUTH_CLIENT_SECRET: test
       GRAFANA_SMTP_PASSWORD: test
@@ -43,6 +44,7 @@ jobs:
             bitwarden/docker-compose.yml
             chzzk/docker-compose.yml
             cockroachdb/docker-compose.yml
+            edge/docker-compose.yml
             evergreen/docker-compose.yml
             flame/docker-compose.yml
             grafana/docker-compose.yml
