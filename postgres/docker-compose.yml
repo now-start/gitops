@@ -1,0 +1,267 @@
+x-deploy-defaults: &deploy-defaults
+  update_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: rollback
+    monitor: 5m
+    delay: 10s
+  rollback_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: pause
+    monitor: 5m
+    delay: 10s
+  restart_policy:
+    condition: any
+    delay: 5s
+
+x-service-defaults: &service-defaults
+  stop_grace_period: 5m
+
+# etcd 멤버 공통값. 멤버 이름과 광고 주소만 서비스별로 지정한다.
+# 상태 검사를 두지 않는다. healthy 이전 태스크는 Swarm DNS에 나타나지 않으므로
+# 클러스터 구성 전에 멤버끼리 이름을 찾지 못하는 교착이 생긴다.
+x-etcd-environment: &etcd-environment
+  TZ: Asia/Seoul
+  ETCD_DATA_DIR: /var/lib/etcd
+  ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+  ETCD_LISTEN_PEER_URLS: http://0.0.0.0:2380
+  ETCD_INITIAL_CLUSTER: etcd-a=http://etcd-a:2380,etcd-b=http://etcd-b:2380,etcd-c=http://etcd-c:2380
+  ETCD_INITIAL_CLUSTER_STATE: new
+  ETCD_INITIAL_CLUSTER_TOKEN: postgres-etcd
+  ETCD_AUTO_COMPACTION_MODE: periodic
+  ETCD_AUTO_COMPACTION_RETENTION: 1h
+
+x-etcd-deploy: &etcd-deploy
+  <<: *deploy-defaults
+  replicas: 1
+  endpoint_mode: dnsrr
+  resources:
+    limits:
+      memory: 0.25G
+    reservations:
+      memory: 0.1G
+
+# Spilo(Patroni + PostgreSQL) 멤버 공통값.
+# SPILO_PROVIDER=local은 클라우드 메타데이터 조회를 건너뛰고
+# 컨테이너 hostname을 Patroni 멤버 이름으로, 그 overlay IP를 접속 주소로 쓴다.
+x-spilo-environment: &spilo-environment
+  TZ: Asia/Seoul
+  SCOPE: postgres
+  SPILO_PROVIDER: local
+  PGVERSION: "18"
+  PGROOT: /home/postgres/pgdata/pgroot
+  ETCD3_HOSTS: '"etcd-a:2379","etcd-b:2379","etcd-c:2379"'
+  PGPASSWORD_SUPERUSER: ${POSTGRES_SUPERUSER_PASSWORD:?POSTGRES_SUPERUSER_PASSWORD is required}
+  PGPASSWORD_STANDBY: ${POSTGRES_STANDBY_PASSWORD:?POSTGRES_STANDBY_PASSWORD is required}
+  PGPASSWORD_ADMIN: ${POSTGRES_ADMIN_PASSWORD:?POSTGRES_ADMIN_PASSWORD is required}
+
+# A 지역 멤버(pg-a, pg-b)는 동기 복제 후보이고 승격 우선순위가 높다.
+# failsafe_mode는 etcd 과반이 잠시 사라져도 멤버끼리 서로 닿으면 primary를 유지한다.
+# 되감기(pg_rewind)에 실패하거나 타임라인이 갈라지면 데이터를 지우고
+# 새 primary에서 다시 복제해 사람 손 없이 standby로 복귀한다.
+x-spilo-configuration-sync: &spilo-configuration-sync |
+  bootstrap:
+    dcs:
+      synchronous_mode: true
+      failsafe_mode: true
+  postgresql:
+    remove_data_directory_on_rewind_failure: true
+    remove_data_directory_on_diverged_timelines: true
+  tags:
+    failover_priority: 2
+
+x-spilo-deploy: &spilo-deploy
+  <<: *deploy-defaults
+  replicas: 1
+  endpoint_mode: dnsrr
+  resources:
+    limits:
+      memory: 1G
+    reservations:
+      memory: 0.75G
+
+x-shm-mount: &shm-mount
+  type: tmpfs
+  target: /dev/shm
+  tmpfs:
+    size: 268435456
+
+services:
+  etcd-a:
+    <<: *service-defaults
+    image: quay.io/coreos/etcd:v3.6.16
+    hostname: etcd-a
+    environment:
+      <<: *etcd-environment
+      ETCD_NAME: etcd-a
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd-a:2379
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: http://etcd-a:2380
+    volumes:
+      - etcd_a_data:/var/lib/etcd
+    deploy:
+      <<: *etcd-deploy
+      placement:
+        constraints:
+          - node.hostname == ${POSTGRES_NODE_A:-NOW_START}
+
+  etcd-b:
+    <<: *service-defaults
+    image: quay.io/coreos/etcd:v3.6.16
+    hostname: etcd-b
+    environment:
+      <<: *etcd-environment
+      ETCD_NAME: etcd-b
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd-b:2379
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: http://etcd-b:2380
+    volumes:
+      - etcd_b_data:/var/lib/etcd
+    deploy:
+      <<: *etcd-deploy
+      placement:
+        constraints:
+          - node.hostname == ${POSTGRES_NODE_B:-Worker}
+
+  etcd-c:
+    <<: *service-defaults
+    image: quay.io/coreos/etcd:v3.6.16
+    hostname: etcd-c
+    environment:
+      <<: *etcd-environment
+      ETCD_NAME: etcd-c
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd-c:2379
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: http://etcd-c:2380
+    volumes:
+      - etcd_c_data:/var/lib/etcd
+    deploy:
+      <<: *etcd-deploy
+      placement:
+        constraints:
+          - node.hostname == ${POSTGRES_NODE_C:-Backup}
+
+  # 상태 검사를 두지 않는다. 이미지 안의 검사 도구를 검증하지 않았고,
+  # Patroni가 멤버 상태와 primary 선출을 직접 관리한다.
+  pg-a:
+    <<: *service-defaults
+    image: ghcr.io/zalando/spilo-18:4.1-p2
+    hostname: pg-a
+    environment:
+      <<: *spilo-environment
+      SPILO_CONFIGURATION: *spilo-configuration-sync
+    volumes:
+      - pg_a_data:/home/postgres/pgdata
+      - *shm-mount
+    deploy:
+      <<: *spilo-deploy
+      placement:
+        constraints:
+          - node.hostname == ${POSTGRES_NODE_A:-NOW_START}
+
+  pg-b:
+    <<: *service-defaults
+    image: ghcr.io/zalando/spilo-18:4.1-p2
+    hostname: pg-b
+    environment:
+      <<: *spilo-environment
+      SPILO_CONFIGURATION: *spilo-configuration-sync
+    volumes:
+      - pg_b_data:/home/postgres/pgdata
+      - *shm-mount
+    deploy:
+      <<: *spilo-deploy
+      placement:
+        constraints:
+          - node.hostname == ${POSTGRES_NODE_B:-Worker}
+
+  # B 지역 멤버는 지역 간 지연이 커밋에 더해지지 않도록 동기 복제 대상에서 빠지고,
+  # 승격 우선순위를 낮춰 A 지역 멤버가 없을 때만 후보가 된다.
+  pg-c:
+    <<: *service-defaults
+    image: ghcr.io/zalando/spilo-18:4.1-p2
+    hostname: pg-c
+    environment:
+      <<: *spilo-environment
+      SPILO_CONFIGURATION: |
+        bootstrap:
+          dcs:
+            synchronous_mode: true
+            failsafe_mode: true
+        postgresql:
+          remove_data_directory_on_rewind_failure: true
+          remove_data_directory_on_diverged_timelines: true
+        tags:
+          nosync: true
+          failover_priority: 1
+    volumes:
+      - pg_c_data:/home/postgres/pgdata
+      - *shm-mount
+    deploy:
+      <<: *spilo-deploy
+      placement:
+        constraints:
+          - node.hostname == ${POSTGRES_NODE_C:-Backup}
+
+  # 서버 목록은 시작할 때마다 다시 만든다. 상태를 저장하지 않으므로
+  # 다른 노드에서 다시 떠도 같은 화면으로 복구된다.
+  # 포트는 host 모드로 열고 DMZ가 걸린 main 노드와 Mac 노드에는 배치하지 않는다.
+  pgadmin:
+    <<: *service-defaults
+    image: dpage/pgadmin4:9.19.0
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        cat > /tmp/servers.json <<'EOF'
+        {
+          "Servers": {
+            "1": {"Name": "pg-a", "Group": "postgres", "Host": "pg-a", "Port": 5432, "MaintenanceDB": "postgres", "Username": "postgres", "SSLMode": "prefer"},
+            "2": {"Name": "pg-b", "Group": "postgres", "Host": "pg-b", "Port": 5432, "MaintenanceDB": "postgres", "Username": "postgres", "SSLMode": "prefer"},
+            "3": {"Name": "pg-c", "Group": "postgres", "Host": "pg-c", "Port": 5432, "MaintenanceDB": "postgres", "Username": "postgres", "SSLMode": "prefer"}
+          }
+        }
+        EOF
+        exec /entrypoint.sh
+    ports:
+      - target: 80
+        published: ${PGADMIN_PORT:-5050}
+        protocol: tcp
+        mode: host
+    environment:
+      TZ: Asia/Seoul
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:?PGADMIN_EMAIL is required}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?PGADMIN_PASSWORD is required}
+      PGADMIN_SERVER_JSON_FILE: /tmp/servers.json
+      PGADMIN_DISABLE_POSTFIX: "true"
+    deploy:
+      <<: *deploy-defaults
+      replicas: 1
+      resources:
+        limits:
+          memory: 0.5G
+        reservations:
+          memory: 0.25G
+      placement:
+        constraints:
+          - node.role == manager
+          - node.hostname != ${POSTGRES_NODE_A:-NOW_START}
+
+# 앱이 네트워크를 추가하지 않고 pg-a·pg-b·pg-c 이름으로 접속하도록
+# platform 스택이 만든 공통 overlay에 붙는다.
+networks:
+  default:
+    external: true
+    name: platform_default
+
+# 데이터는 NFS가 아닌 노드 로컬 볼륨에 둔다. 복제는 Patroni가 담당한다.
+volumes:
+  etcd_a_data:
+    driver: local
+  etcd_b_data:
+    driver: local
+  etcd_c_data:
+    driver: local
+  pg_a_data:
+    driver: local
+  pg_b_data:
+    driver: local
+  pg_c_data:
+    driver: local

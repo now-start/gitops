@@ -20,6 +20,16 @@
       "matchPackageNames": ["renovate/renovate"],
       "schedule": ["* 0-5 * * *"],
       "updateNotScheduled": false
+    },
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/zalando/spilo-18"],
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)-p(?<patch>\\d+)$"
+    },
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/zalando/spilo-18", "quay.io/coreos/etcd"],
+      "automerge": false
     }
   ]
 }

@@ -34,6 +34,7 @@ actionlint와 기존 Bats 계약 테스트를 실행합니다. 로컬에서도
 | `chzzk` | `chzzk/docker-compose.yml` | nyang-nyang-bot | `platform_default`, NFS |
 | `barosteel` | `barosteel/docker-compose.yml` | Barosteel 회원·견적·포인트 서비스; [배포 입력값](barosteel/README.md) | `platform_default`, 기존 DB 시크릿 |
 | `cockroachdb` | `cockroachdb/docker-compose.yml` | 분산 SQL 클러스터 | 노드별 로컬 디스크(NFS 사용 안 함), 매니저 Docker 소켓 |
+| `postgres` | `postgres/docker-compose.yml` | Patroni 기반 PostgreSQL 18 고가용성 클러스터와 pgAdmin | `platform_default`, 노드별 로컬 디스크(NFS 사용 안 함) |
 | `evergreen` | `evergreen/docker-compose.yml` | 로또·코인 서비스 | `platform_default` |
 | `bitwarden` | `bitwarden/docker-compose.yml` | Vaultwarden | NFS |
 | `flame` | `flame/docker-compose.yml` | Flame 대시보드 | NFS |
@@ -148,7 +149,7 @@ Lotto도 공통 시작 유예 5분을 상속합니다. 직접 검사 방식과 �
 암호화된 Config Server 설정이 필요합니다.
 [배포 안내](barosteel/README.md)를 참고하세요.
 
-1. `grafana`, `platform`, `chzzk`, `cockroachdb`, `evergreen`,
+1. `grafana`, `platform`, `chzzk`, `cockroachdb`, `postgres`, `evergreen`,
    `bitwarden`, `flame`을 Git 연동 스택으로 생성합니다.
    `portainer` 스택은 자체 업데이트 실패로 관리 기능까지 중단되지 않도록
    수동으로 관리합니다.
@@ -213,6 +214,67 @@ cockroach node decommission <dead-node-id> --insecure --host=<surviving-node>:26
 전까지 태스크를 서비스 DNS에 등록하지 않지만, CockroachDB의 준비 상태 검사는
 초기화된 클러스터를 요구하므로 초기화 과정이 교착 상태에 빠질 수 있기 때문입니다.
 
+### PostgreSQL 고가용성 클러스터
+
+`postgres` 스택은 Zalando Spilo 이미지(Patroni + PostgreSQL 18), etcd 3개, pgAdmin을 실행합니다.
+스택 이름은 `postgres`이고 `platform_default`에 연결하므로 `platform` 스택을 먼저 배포합니다.
+`.env.example`의 필수 값을 Portainer 스택 환경 변수에 넣고 Git 연동 스택을 만들면
+추가 작업 없이 클러스터가 구성됩니다. 필수 값이 비어 있으면 배포가 거부됩니다.
+
+| 멤버 | 기본 노드 | 역할 |
+| --- | --- | --- |
+| `etcd-a`, `pg-a` | `NOW_START` (A 지역) | 동기 복제 후보, 승격 우선순위 2 |
+| `etcd-b`, `pg-b` | `Worker` (A 지역) | 동기 복제 후보, 승격 우선순위 2 |
+| `etcd-c`, `pg-c` | `Backup` (B 지역) | 비동기 standby(`nosync`), 승격 우선순위 1 |
+
+노드 hostname이 다르면 `POSTGRES_NODE_A`, `POSTGRES_NODE_B`, `POSTGRES_NODE_C`로 지정합니다.
+데이터는 NFS가 아닌 노드 로컬 볼륨에 두며, 노드 간 복제는 Patroni가 담당합니다.
+
+- **첫 배포:** etcd가 정해진 멤버 목록으로 클러스터를 구성하고, 먼저 리더 키를 잡은 Patroni 멤버가
+  DB를 초기화합니다. 나머지 멤버는 primary를 복제해 standby가 됩니다. 초기 primary가 `pg-c`가 되면
+  아래 명령으로 A 지역 멤버로 전환합니다.
+- **장애 전환:** primary가 응답하지 않으면 TTL(30초) 뒤 동기 standby를 승격합니다. 동기 모드에서는
+  동기 standby만 자동 승격 대상이므로 A 지역 두 멤버가 모두 없으면 자동으로 승격하지 않습니다.
+- **복귀:** 예전 primary는 `pg_rewind`로 되감아 standby로 합류합니다. 되감기에 실패하거나 타임라인이
+  갈라지면 데이터를 지우고 새 primary에서 다시 복제합니다.
+- **etcd 과반 상실:** `failsafe_mode`를 켜 두었으므로 Patroni 멤버끼리 서로 닿으면 primary를 유지합니다.
+  A 지역 전체가 중단되는 경우처럼 과반과 멤버를 함께 잃으면 사람이 승격해야 합니다.
+- **상태 검사:** etcd와 Patroni 멤버는 의도적으로 상태 검사를 사용하지 않습니다. healthy 이전 태스크가
+  DNS에 나타나지 않아 클러스터 구성이 교착될 수 있고, 멤버 상태는 Patroni가 관리합니다.
+
+클러스터 상태 확인과 수동 전환은 `pg-*` 컨테이너 콘솔에서 실행합니다.
+
+```sh
+patronictl -c /run/postgres.yml list
+patronictl -c /run/postgres.yml switchover --candidate pg-b --force
+```
+
+애플리케이션은 `platform_default`에서 세 멤버를 모두 지정하고 드라이버가 primary를 찾게 합니다.
+장애 전환 뒤에도 접속 주소를 바꿀 필요가 없습니다. 멤버 서비스는 `dnsrr`이므로
+중단된 멤버 이름은 바로 해석에 실패하고 드라이버가 다음 호스트로 넘어갑니다.
+
+```text
+jdbc:postgresql://pg-a:5432,pg-b:5432,pg-c:5432/DB_NAME?targetServerType=primary&connectTimeout=3
+```
+
+Spilo 기본 `pg_hba`는 SSL 연결만 허용합니다. pgJDBC와 pgAdmin의 기본 `sslmode=prefer`로 접속됩니다.
+DB와 계정은 pgAdmin이나 `psql`로 만듭니다. `platform_default`는 attachable 네트워크가 아니므로
+`docker run --network`로는 붙을 수 없습니다. 일회성 작업은 `docker service create --network platform_default
+--restart-condition none ...`으로 실행하거나 `pg-*` 컨테이너 콘솔의 `psql`을 사용합니다.
+
+pgAdmin은 `NOW_START`가 아닌 매니저에 배치하고 5050 포트를 host 모드로 공개합니다.
+`docker service ps postgres_pgadmin`으로 실행 노드를 확인한 뒤 `http://<노드 Tailscale IP>:5050`으로 접속합니다.
+세 멤버는 시작할 때 서버 목록에 자동 등록됩니다. pgAdmin은 상태를 저장하지 않으므로
+재시작하면 저장한 비밀번호와 화면 설정이 초기화됩니다.
+
+남은 제약은 다음과 같습니다.
+
+- WAL-G 백업을 구성하지 않았습니다. 복제는 백업이 아니므로 별도 백업이 필요합니다.
+- 세 멤버가 같은 이미지 태그를 사용하므로 이미지 업데이트 시 동시에 재시작되어 짧게 중단됩니다.
+  Renovate는 Spilo와 etcd 업데이트를 자동 병합하지 않습니다.
+- PostgreSQL 메이저 버전 변경은 `pg_upgrade`가 필요하므로 이미지 교체만으로 진행하지 않습니다.
+- etcd 멤버 영구 교체(`etcdctl member remove/add`)는 수동으로 진행합니다.
+
 ### Compose 경로 이전
 
 이 저장소의 모든 스택과 템플릿은 `docker-compose.yml`을 사용합니다.
@@ -246,7 +308,7 @@ Swarm 태스크가 교체됩니다. 기준 버전 변경을 병합한 뒤 아래
 Grafana와 애플리케이션 스택은 플랫폼이 만든 공통 네트워크를 사용하므로 다음 순서로 배포합니다.
 
 1. `portainer`, `platform`
-2. `grafana`
+2. `grafana`, `postgres`
 3. `barosteel`, `chzzk`, `evergreen`
 4. `bitwarden`, `flame`
 
@@ -306,6 +368,8 @@ Docker Compose의 모든 이미지에는 자체 레지스트리 여부와 관계
 마이너·패치 업데이트의 병합 조건은 사람의 검토가 아닌 CI 통과입니다.
 Portainer Agent와 Server의 호환성을 사람이 확인해야 한다면
 해당 두 이미지를 자동 병합에서 제외하는 규칙을 추가하세요.
+`postgres` 스택의 Spilo와 etcd는 세 멤버가 함께 재시작되므로 자동 병합에서 제외합니다.
+Spilo 태그(`4.1-p2`)는 `-p` 뒤 숫자를 패치 버전으로 해석하도록 별도 버전 규칙을 사용합니다.
 
 ### Mend 앱에서 이전
 
@@ -377,6 +441,7 @@ Renovate가 같은 버전을 즉시 다시 제안하지 않도록 커밋을 되�
 | `platform` | `SPRING_ENCRYPT_KEY` |
 | `flame` | `FLAME_PASSWORD` |
 | `renovate` | `RENOVATE_TOKEN` |
+| `postgres` | `POSTGRES_SUPERUSER_PASSWORD`, `POSTGRES_STANDBY_PASSWORD`, `POSTGRES_ADMIN_PASSWORD`, `PGADMIN_EMAIL`, `PGADMIN_PASSWORD` |
 
 `.env.example` 템플릿에는 시크릿 변수 이름만 기록합니다.
 실제 `.env` 파일에는 시크릿만 담고 Git 추적에서 제외하며, 값은 Portainer에서 관리합니다.
@@ -391,11 +456,12 @@ Git으로 추적하는 Compose 파일에 둡니다.
 - Portainer 기본 오버레이는 VXLAN 트래픽을 Tailscale에 맞추기 위해 MTU `1200`을 사용합니다.
 - 모든 스택 소유 오버레이 네트워크는 MTU `1200`을 사용합니다. 변경된 스택을 재배포하기 전에 기존 네트워크를 다시 생성하세요.
 - 포트를 공개하는 서비스를 배포하기 전에 Swarm `ingress` 네트워크를 MTU `1200`으로 다시 생성합니다.
-- `grafana`, `barosteel`, `chzzk`, `evergreen`을 배포하기 전에 `platform` 스택이 생성한 `platform_default`가 존재해야 합니다.
+- `grafana`, `postgres`, `barosteel`, `chzzk`, `evergreen`을 배포하기 전에 `platform` 스택이 생성한 `platform_default`가 존재해야 합니다.
 - 배치 가능한 모든 노드는 `NOW_START`의 Tailscale 주소 `100.100.1.1`에서 NFSv4를 마운트할 수 있어야 합니다.
 - DSM NFS 권한은 Tailscale 클라이언트 대역 `100.64.0.0/10`을 허용해야 합니다.
 - 비공개 이미지를 사용하려면 매니저에서 `ghcr.io` 인증을 완료해야 합니다.
 - 공개 포트 `1080`, `3000`, `5005`, `6379`, `8000`, `9443`을 사용할 수 있어야 합니다.
+- pgAdmin을 실행할 매니저 노드에서 host 모드 포트 `5050`을 사용할 수 있어야 합니다.
 
 Tailscale 기반 Swarm을 새로 초기화했다면, 포트를 공개하는 서비스를 배포하기 전에
 라우팅 메시 네트워크를 같은 MTU로 다시 생성합니다.
@@ -427,6 +493,10 @@ docker stack config -c chzzk/docker-compose.yml >/dev/null
 docker stack config -c evergreen/docker-compose.yml >/dev/null
 
 docker stack config -c portainer/docker-compose.yml >/dev/null
+
+POSTGRES_SUPERUSER_PASSWORD=test POSTGRES_STANDBY_PASSWORD=test \
+POSTGRES_ADMIN_PASSWORD=test PGADMIN_EMAIL=test@example.com PGADMIN_PASSWORD=test \
+  docker stack config -c postgres/docker-compose.yml >/dev/null
 ```
 
 배포 후 실제 스케줄러와 네트워크 상태를 확인합니다.

@@ -23,6 +23,11 @@ jobs:
       FLAME_PASSWORD: test
       GRAFANA_OAUTH_CLIENT_SECRET: test
       GRAFANA_SMTP_PASSWORD: test
+      PGADMIN_EMAIL: test@example.com
+      PGADMIN_PASSWORD: test
+      POSTGRES_ADMIN_PASSWORD: test
+      POSTGRES_STANDBY_PASSWORD: test
+      POSTGRES_SUPERUSER_PASSWORD: test
       SPRING_ENCRYPT_KEY: test
     steps:
       - name: Checkout repository
@@ -43,6 +48,7 @@ jobs:
             grafana/docker-compose.yml
             platform/docker-compose.yml
             portainer/docker-compose.yml
+            postgres/docker-compose.yml
             renovate/docker-compose.yml
           )
 
