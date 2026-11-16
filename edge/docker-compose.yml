@@ -31,7 +31,7 @@ services:
   # 이미지에 셸과 검사 도구가 없어 상태 검사를 두지 않는다.
   cloudflared:
     <<: *service-defaults
-    image: cloudflare/cloudflared:2026.10.7
+    image: cloudflare/cloudflared:2026.11.0
     command: tunnel --no-autoupdate run
     environment:
       TZ: Asia/Seoul
