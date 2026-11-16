@@ -335,9 +335,33 @@ Traefik 전용 Docker API 프록시(`socket-proxy`)를 매니저마다 하나씩
 | `bitwarden.nowstart.org` | `bitwarden_bitwarden` | `edge_public` | `80` |
 | `flame.nowstart.org` | `flame_flame` | `edge_public` | `5005` |
 
-새로 공개할 서비스는 `edge_public`을 external 네트워크로 추가하고 `deploy.labels`에 라벨을 답니다.
+새로 공개할 서비스는 `edge_public`에 연결하고 `deploy.labels`에 라벨을 답니다.
 컨테이너 `labels`가 아닙니다. 라벨을 단 서비스는 곧바로 인터넷에 공개되며, 라우터·서비스 이름은
 모든 스택에서 겹치지 않아야 합니다.
+
+- `bitwarden`, `flame`처럼 서비스가 하나뿐인 스택은 스택 자체 네트워크 없이 `edge_public`을 기본 네트워크로 씁니다.
+- 앱과 DB처럼 내부 통신이 있는 스택은 기본 네트워크를 유지하고, 공개할 서비스에만 `edge_public`을 추가합니다.
+  DB 등 공개하지 않는 서비스는 `edge_public`에 연결하지 않습니다.
+
+서비스가 하나뿐인 스택:
+
+```yaml
+services:
+  app:
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.app.rule=Host(`app.nowstart.org`)
+        - traefik.http.routers.app.entrypoints=web
+        - traefik.http.services.app.loadbalancer.server.port=8080
+
+networks:
+  default:
+    external: true
+    name: edge_public
+```
+
+내부 서비스가 함께 있는 스택:
 
 ```yaml
 services:
@@ -351,12 +375,21 @@ services:
         - traefik.http.routers.app.rule=Host(`app.nowstart.org`)
         - traefik.http.routers.app.entrypoints=web
         - traefik.http.services.app.loadbalancer.server.port=8080
+  db:
+    image: postgres:18
 
 networks:
+  default:
+    driver: overlay
+    driver_opts:
+      com.docker.network.driver.mtu: "1200"
   edge:
     external: true
     name: edge_public
 ```
+
+기존 `bitwarden_default`, `flame_default`는 두 스택을 이 구성으로 재배포한 뒤 남아 있으면
+`docker network rm`으로 정리합니다.
 
 `loadbalancer.server.port`는 컨테이너 내부 포트입니다. Traefik이 overlay로 직접 연결하므로
 Traefik으로만 공개하는 서비스에는 `ports`가 필요 없습니다. 기존 DSM 리버스 프록시가 사용하는
