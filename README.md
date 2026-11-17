@@ -34,7 +34,7 @@ actionlint와 기존 Bats 계약 테스트를 실행합니다. 로컬에서도
 | `chzzk` | `chzzk/docker-compose.yml` | nyang-nyang-bot | `platform_default`, Config Server의 Google 키 JSON |
 | `barosteel` | `barosteel/docker-compose.yml` | Barosteel 회원·견적·포인트 서비스; [배포 입력값](barosteel/README.md) | `platform_default`, 기존 DB 시크릿 |
 | `cockroachdb` | `cockroachdb/docker-compose.yml` | 분산 SQL 클러스터 | 노드별 로컬 디스크(NFS 사용 안 함), 매니저 Docker 소켓 |
-| `postgres` | `postgres/docker-compose.yml` | Patroni 기반 PostgreSQL 18 고가용성 클러스터와 pgAdmin | `platform_default`, 노드별 로컬 디스크(NFS 사용 안 함) |
+| `postgres` | `postgres/docker-compose.yml` | Patroni 기반 PostgreSQL 18, HAProxy와 pgAdmin | `platform_default`, pgAdmin용 `edge_public`, 노드별 로컬 디스크(NFS 사용 안 함) |
 | `edge` | `edge/docker-compose.yml` | Cloudflare Tunnel 커넥터, Traefik 내부 라우터, 조회 전용 Docker API 프록시 | Cloudflare 원격 관리 터널, 매니저 Docker 소켓; `edge_public` 생성 |
 | `evergreen` | `evergreen/docker-compose.yml` | 로또·코인 서비스 | `platform_default` |
 | `bitwarden` | `bitwarden/docker-compose.yml` | Vaultwarden | `edge_public`, NFS |
@@ -217,8 +217,9 @@ cockroach node decommission <dead-node-id> --insecure --host=<surviving-node>:26
 
 ### PostgreSQL 고가용성 클러스터
 
-`postgres` 스택은 Zalando Spilo 이미지(Patroni + PostgreSQL 18), etcd 3개, pgAdmin을 실행합니다.
-스택 이름은 `postgres`이고 `platform_default`에 연결하므로 `platform` 스택을 먼저 배포합니다.
+`postgres` 스택은 Zalando Spilo 이미지(Patroni + PostgreSQL 18), etcd 3개, HAProxy, pgAdmin을 실행합니다.
+스택 이름은 `postgres`입니다. DB는 `platform_default`, pgAdmin 웹 공개는 `edge_public`을 사용하므로
+`platform`과 `edge` 스택을 먼저 배포합니다.
 `.env.example`의 필수 값을 Portainer 스택 환경 변수에 넣고 Git 연동 스택을 만들면
 추가 작업 없이 클러스터가 구성됩니다. 필수 값이 비어 있으면 배포가 거부됩니다.
 
@@ -250,22 +251,40 @@ patronictl -c /run/postgres.yml list
 patronictl -c /run/postgres.yml switchover --candidate pg-b --force
 ```
 
-애플리케이션은 `platform_default`에서 세 멤버를 모두 지정하고 드라이버가 primary를 찾게 합니다.
-장애 전환 뒤에도 접속 주소를 바꿀 필요가 없습니다. 멤버 서비스는 `dnsrr`이므로
-중단된 멤버 이름은 바로 해석에 실패하고 드라이버가 다음 호스트로 넘어갑니다.
+애플리케이션은 `platform_default`에서 `postgres_haproxy:5432`로 접속합니다.
+HAProxy는 매니저마다 하나씩 실행하고 Swarm VIP로 접근하며, 호스트 포트는 공개하지 않습니다.
+각 멤버의 Patroni `:8008/primary`가 HTTP 200인 경우에만 해당 DB의 5432 포트로 연결합니다.
+Docker DNS를 주기적으로 다시 조회하므로 멤버 재생성으로 IP가 바뀌어도 반영합니다.
 
 ```text
-jdbc:postgresql://pg-a:5432,pg-b:5432,pg-c:5432/DB_NAME?targetServerType=primary&connectTimeout=3
+jdbc:postgresql://postgres_haproxy:5432/DB_NAME?targetServerType=primary&connectTimeout=3
 ```
 
-Spilo 기본 `pg_hba`는 SSL 연결만 허용합니다. pgJDBC와 pgAdmin의 기본 `sslmode=prefer`로 접속됩니다.
+primary가 바뀌면 헬스체크 반영 후 새 연결이 새 primary로 전달됩니다. 이전 primary로 향하는
+연결은 종료하므로 앱의 연결 풀 재연결과 실패한 트랜잭션 처리가 필요합니다. primary가 없으면
+replica로 우회하지 않고 연결에 실패합니다. 추가 환경 변수는 필요하지 않습니다.
+
+Spilo 기본 `pg_hba`는 SSL 연결만 허용합니다. HAProxy는 TLS를 종료하지 않고 그대로 전달하며,
+pgJDBC와 pgAdmin의 기본 `sslmode=prefer`로 접속됩니다.
 DB와 계정은 pgAdmin이나 `psql`로 만듭니다. `platform_default`는 attachable 네트워크가 아니므로
 `docker run --network`로는 붙을 수 없습니다. 일회성 작업은 `docker service create --network platform_default
 --restart-condition none ...`으로 실행하거나 `pg-*` 컨테이너 콘솔의 `psql`을 사용합니다.
 
-pgAdmin은 `NOW_START`가 아닌 매니저에 배치하고 5050 포트를 host 모드로 공개합니다.
-`docker service ps postgres_pgadmin`으로 실행 노드를 확인한 뒤 `http://<노드 Tailscale IP>:5050`으로 접속합니다.
-세 멤버는 시작할 때 서버 목록에 자동 등록됩니다. pgAdmin은 상태를 저장하지 않으므로
+pgAdmin은 `https://pgadmin.nowstart.org`에서 **Synology SSO** 버튼으로 로그인합니다.
+Synology에 pgAdmin 전용 OIDC 앱을 등록하고 콜백을 `https://pgadmin.nowstart.org/oauth2/authorize`로 설정합니다.
+Portainer 환경 변수 `PGADMIN_SSO_CLIENT_ID`·`PGADMIN_SSO_CLIENT_SECRET`에 발급한 값을 넣습니다.
+SSO는 `administrators` 그룹만 허용하고 TLS 인증서 검증과 PKCE(S256)를 사용합니다.
+기존 `PGADMIN_EMAIL`·`PGADMIN_PASSWORD` 로그인은 비상용 pgAdmin 관리자 계정으로 유지합니다.
+SSO 사용자는 별도 계정으로 생성되며, 내부 관리자 계정과 자동으로 합쳐지지 않습니다.
+DB 서버 목록은 공유하되 비밀번호는 포함하지 않습니다. SSO 로그인 후에도 PostgreSQL 계정과 비밀번호가
+필요하며, DB 비밀번호를 저장하려면 pgAdmin의 마스터 비밀번호를 설정해야 합니다.
+기존 와일드카드 Cloudflare Tunnel → Traefik → pgAdmin:80 경로를 사용하며,
+별도의 `pgadmin` DNS 레코드가 있다면 기존 와일드카드 터널과 같은 대상으로 맞춥니다.
+DB와 HAProxy의 5432 포트는 외부에 공개하지 않습니다.
+pgAdmin은 `NOW_START`가 아닌 매니저에 배치하고 기존 5050 host 포트도 유지합니다.
+직접 접속이 필요하면 `docker service ps postgres_pgadmin`으로 실행 노드를 확인한 뒤
+`http://<노드 Tailscale IP>:5050`으로 접속합니다.
+세 멤버와 `primary (HAProxy)` 접속점은 시작할 때 서버 목록에 자동 등록됩니다. pgAdmin은 상태를 저장하지 않으므로
 재시작하면 저장한 비밀번호와 화면 설정이 초기화됩니다.
 
 남은 제약은 다음과 같습니다.
@@ -352,6 +371,7 @@ Traefik 전용 Docker API 프록시(`socket-proxy`)를 매니저마다 하나씩
 | `portainer.nowstart.org` | `portainer_portainer` | `edge_public` | `9000`(HTTP) |
 | `bitwarden.nowstart.org` | `bitwarden_bitwarden` | `edge_public` | `80` |
 | `flame.nowstart.org` | `flame_flame` | `edge_public` | `5005` |
+| `pgadmin.nowstart.org` | `postgres_pgadmin` | `edge_public` | `80` |
 | `traefik.nowstart.org` | Traefik 관리 화면(`api@internal`) | 해당 없음 | 해당 없음 |
 
 Traefik 관리 화면과 API는 `oauth2-proxy`의 ForwardAuth로 Synology SSO 인증을 거치며,
@@ -365,8 +385,9 @@ Synology는 `email_verified`를 제공하지 않아 이메일 검증 여부 검�
 
 배포 전에 Portainer의 edge 환경 변수에 다음 값을 설정합니다.
 
-- `TRAEFIK_SSO_CLIENT_SECRET`: 등록한 Synology OIDC 앱의 Client Secret
-- `TRAEFIK_SSO_COOKIE_SECRET`: `openssl rand -base64 32 | tr '+/' '-_'`로 만든 쿠키 암호화 키. 모든 복제본에 같은 값을 사용합니다.
+- `OAUTH2_PROXY_CLIENT_ID`: 등록한 Synology OIDC 앱의 Client ID
+- `OAUTH2_PROXY_CLIENT_SECRET`: 등록한 Synology OIDC 앱의 Client Secret
+- `OAUTH2_PROXY_COOKIE_SECRET`: `openssl rand -base64 32 | tr '+/' '-_'`로 만든 쿠키 암호화 키. 모든 복제본에 같은 값을 사용합니다.
 
 기존 `TRAEFIK_DASHBOARD_USERS`는 더 이상 사용하지 않습니다. 쿠키는 HTTPS 전용·HttpOnly이며,
 `traefik.nowstart.org`에만 적용되고 1시간 후 만료됩니다. 쿠키 키 교체 시 기존 세션도 무효화됩니다.
@@ -632,8 +653,8 @@ Renovate가 같은 버전을 즉시 다시 제안하지 않도록 커밋을 되�
 | `platform` | `SPRING_ENCRYPT_KEY` |
 | `flame` | `FLAME_PASSWORD` |
 | `renovate` | `RENOVATE_TOKEN` |
-| `postgres` | `POSTGRES_SUPERUSER_PASSWORD`, `POSTGRES_STANDBY_PASSWORD`, `POSTGRES_ADMIN_PASSWORD`, `PGADMIN_EMAIL`, `PGADMIN_PASSWORD` |
-| `edge` | `CLOUDFLARE_TUNNEL_TOKEN`, `TRAEFIK_SSO_CLIENT_SECRET`, `TRAEFIK_SSO_COOKIE_SECRET` |
+| `postgres` | `POSTGRES_SUPERUSER_PASSWORD`, `POSTGRES_STANDBY_PASSWORD`, `POSTGRES_ADMIN_PASSWORD`, `PGADMIN_EMAIL`, `PGADMIN_PASSWORD`, `PGADMIN_SSO_CLIENT_ID`, `PGADMIN_SSO_CLIENT_SECRET` |
+| `edge` | `CLOUDFLARE_TUNNEL_TOKEN`, `OAUTH2_PROXY_CLIENT_ID`, `OAUTH2_PROXY_CLIENT_SECRET`, `OAUTH2_PROXY_COOKIE_SECRET` |
 
 `.env.example` 템플릿에는 시크릿 변수 이름만 기록합니다.
 실제 `.env` 파일에는 시크릿만 담고 Git 추적에서 제외하며, 값은 Portainer에서 관리합니다.
@@ -690,9 +711,10 @@ docker stack config -c portainer/docker-compose.yml >/dev/null
 
 POSTGRES_SUPERUSER_PASSWORD=test POSTGRES_STANDBY_PASSWORD=test \
 POSTGRES_ADMIN_PASSWORD=test PGADMIN_EMAIL=test@example.com PGADMIN_PASSWORD=test \
+PGADMIN_SSO_CLIENT_ID=test PGADMIN_SSO_CLIENT_SECRET=test \
   docker stack config -c postgres/docker-compose.yml >/dev/null
 
-CLOUDFLARE_TUNNEL_TOKEN=test TRAEFIK_SSO_CLIENT_SECRET=test TRAEFIK_SSO_COOKIE_SECRET=test \
+CLOUDFLARE_TUNNEL_TOKEN=test OAUTH2_PROXY_CLIENT_ID=test OAUTH2_PROXY_CLIENT_SECRET=test OAUTH2_PROXY_COOKIE_SECRET=test \
   docker stack config -c edge/docker-compose.yml >/dev/null
 ```
 

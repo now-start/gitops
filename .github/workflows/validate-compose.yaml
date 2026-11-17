@@ -26,12 +26,15 @@ jobs:
       GRAFANA_SMTP_PASSWORD: test
       PGADMIN_EMAIL: test@example.com
       PGADMIN_PASSWORD: test
+      PGADMIN_SSO_CLIENT_ID: test
+      PGADMIN_SSO_CLIENT_SECRET: test
       POSTGRES_ADMIN_PASSWORD: test
       POSTGRES_STANDBY_PASSWORD: test
       POSTGRES_SUPERUSER_PASSWORD: test
       SPRING_ENCRYPT_KEY: test
-      TRAEFIK_SSO_CLIENT_SECRET: test
-      TRAEFIK_SSO_COOKIE_SECRET: test
+      OAUTH2_PROXY_CLIENT_ID: test
+      OAUTH2_PROXY_CLIENT_SECRET: test
+      OAUTH2_PROXY_COOKIE_SECRET: test
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
