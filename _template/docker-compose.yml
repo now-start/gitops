@@ -29,6 +29,8 @@ services:
     <<: *service-defaults
     image: REPLACE_IMAGE:0.0.0
     # 서비스에 필요한 설정만 주석을 해제해 사용합니다.
+    # HTTP 서비스는 공개 포트 대신 아래 deploy.labels와 edge 네트워크로 Traefik을 통해 공개합니다.
+    # ports는 HTTP가 아닌 프로토콜처럼 호스트 포트로 직접 받아야 할 때만 사용합니다.
     # ports:
     #   - target: 8080
     #     published: 8080
@@ -47,17 +49,31 @@ services:
     # healthcheck:
     #   <<: *healthcheck-defaults
     #   test: ["CMD", "/workspace/health-check"]
+    # Traefik으로 공개할 때 edge 네트워크를 함께 연결합니다.
+    # networks:
+    #   - default
+    #   - edge
     deploy:
       <<: *deploy-defaults
       mode: replicated
       replicas: 1
       # 노드마다 하나씩 실행하려면 mode: global로 변경하고 replicas를 제거합니다.
+      # Traefik 공개: <스택 이름>.nowstart.org로 공개됩니다. app은 스택 이름으로 바꾸고 포트는 컨테이너 포트입니다.
+      # 다른 호스트 이름이 필요하면 traefik.http.routers.<이름>.rule=Host(`<호스트>`) 라벨을 추가합니다.
+      # labels:
+      #   - traefik.enable=true
+      #   - traefik.http.services.app.loadbalancer.server.port=8080
 
 networks:
   default:
     driver: overlay
     driver_opts:
       com.docker.network.driver.mtu: "1200"
+  # Traefik으로 공개할 때 주석을 해제합니다. edge 스택이 생성하는 공개 서비스용 overlay입니다.
+  # 서비스가 하나뿐이면 위 default 대신 이 네트워크를 default로 지정해도 됩니다.
+  # edge:
+  #   external: true
+  #   name: edge_public
 
 volumes:
   app_data:

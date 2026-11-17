@@ -11,7 +11,10 @@ NFS 서버 기본값은 `100.100.1.1`, 공유 경로 예제는 `/volume1/docker/
 3. NFS 기본값 `100.100.1.1:/volume1/docker/app`에서 `app`을 해당 서비스의 공유 디렉터리로 바꿉니다. 저장소가 필요 없으면 서비스의 `volumes`와 최상위 `volumes`를 함께 제거합니다.
 4. 필요한 포트·환경변수·상태 검사 항목만 주석을 해제합니다. 시간대가 필요하면 `TZ: Asia/Seoul` 예제를 사용합니다. Spring/Paketo 이미지에서는 `THC_PORT: "8081"`, `THC_PATH: /actuator/health/readiness`와 `/workspace/health-check` 예제를 함께 활성화합니다.
 5. `replicas`를 지정하거나, 노드마다 실행하려면 `mode: global`로 바꾸고 `replicas`를 제거합니다.
-6. `docker stack config -c <stack>/docker-compose.yml`로 검증한 뒤 배포합니다.
+6. 외부에 공개할 HTTP 서비스는 공개 포트 대신 Traefik으로 공개합니다. 서비스의 `networks`, `deploy.labels`와
+   최상위 `edge` 네트워크 주석을 해제하고, 포트 라벨의 `app`을 스택 이름으로, `8080`을 컨테이너 포트로 바꿉니다.
+   호스트 이름은 `<스택 이름>.nowstart.org`가 됩니다. 자세한 규칙은 저장소 README의 "Cloudflare Tunnel과 Traefik"을 봅니다.
+7. `docker stack config -c <stack>/docker-compose.yml`로 검증한 뒤 배포합니다.
 
 서비스를 추가할 때도 `service-defaults`와 `deploy-defaults`를 상속합니다.
 YAML 병합은 얕은 병합이므로 `deploy`를 다시 선언할 때 `<<: *deploy-defaults`를 포함해야 합니다.
@@ -27,6 +30,7 @@ YAML 병합은 얕은 병합이므로 `deploy`를 다시 선언할 때 `<<: *dep
 | 롤백 | 한 개씩, stop-first, 실패 시 pause, 5분 감시 |
 | 재시작 | any, 5초 지연 |
 | 상태 검사 | 선택 사항. 활성화 시 30초 간격·30초 제한·3회 실패·5분 시작 유예 |
+| 외부 공개 | 선택 사항. `edge_public` 연결과 Traefik 라벨 두 개, 호스트 이름 `<스택 이름>.nowstart.org` |
 
 이미지·포트·환경변수·저장소·서비스 수·복제 수·배치 제약은 서비스별 입력입니다.
 상태 검사 명령은 이미지에 실제 존재하고 서비스 자체의 생존 여부를 확인하는 명령을 사용합니다.

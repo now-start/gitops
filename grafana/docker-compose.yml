@@ -66,8 +66,6 @@ services:
       labels:
         - traefik.enable=true
         - traefik.swarm.network=platform_default
-        - traefik.http.routers.grafana.rule=Host(`grafana.nowstart.org`)
-        - traefik.http.routers.grafana.entrypoints=web
         - traefik.http.services.grafana.loadbalancer.server.port=3000
       resources:
         limits:

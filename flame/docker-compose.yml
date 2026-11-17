@@ -47,8 +47,6 @@ services:
       replicas: 1
       labels:
         - traefik.enable=true
-        - traefik.http.routers.flame.rule=Host(`flame.nowstart.org`)
-        - traefik.http.routers.flame.entrypoints=web
         - traefik.http.services.flame.loadbalancer.server.port=5005
       resources:
         limits:

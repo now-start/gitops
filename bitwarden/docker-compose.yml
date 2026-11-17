@@ -47,8 +47,6 @@ services:
       replicas: 1
       labels:
         - traefik.enable=true
-        - traefik.http.routers.bitwarden.rule=Host(`bitwarden.nowstart.org`)
-        - traefik.http.routers.bitwarden.entrypoints=web
         - traefik.http.services.bitwarden.loadbalancer.server.port=80
       resources:
         limits:

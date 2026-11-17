@@ -346,15 +346,27 @@ docker run --rm -it httpd:2.4-alpine htpasswd -nB admin
 
 관리 화면은 클러스터 내부 구조를 드러내므로 Cloudflare Access를 앞에 함께 두는 것을 권장합니다.
 
-새로 공개할 서비스는 `edge_public`에 연결하고 `deploy.labels`에 라벨을 답니다.
-컨테이너 `labels`가 아닙니다. 라벨을 단 서비스는 곧바로 인터넷에 공개되며, 라우터·서비스 이름은
-모든 스택에서 겹치지 않아야 합니다.
+새로 공개할 서비스는 `edge_public`에 연결하고 `deploy.labels`에 라벨 두 개를 답니다.
+컨테이너 `labels`가 아닙니다. 라벨을 단 서비스는 곧바로 인터넷에 공개됩니다.
+
+| 라벨 | 의미 |
+| --- | --- |
+| `traefik.enable=true` | 공개 대상으로 지정합니다. 이 라벨이 없는 서비스는 공개하지 않습니다. |
+| `traefik.http.services.<스택 이름>.loadbalancer.server.port=<컨테이너 포트>` | 요청을 보낼 컨테이너 포트입니다. Swarm에서는 생략할 수 없습니다. |
+
+- 호스트 이름은 Traefik 기본 규칙에 따라 `<스택 이름>.nowstart.org`가 되고, 진입점은 `web`을 씁니다.
+  스택 이름은 Portainer 스택 이름이자 디렉터리 이름입니다.
+- 다른 호스트 이름이 필요하거나 한 스택에서 서비스 두 개 이상을 공개하면 router rule 라벨을 추가합니다.
+  예: ``traefik.http.routers.platform-gateway.rule=Host(`spring.nowstart.org`)``
+- 서비스 이름(`<스택 이름>` 자리)은 모든 스택에서 겹치지 않아야 합니다. 같은 이름을 쓰면 서로 다른 서비스가
+  하나의 부하 분산 대상으로 합쳐집니다.
+- `edge_public`이 아닌 네트워크로 연결해야 하면 `traefik.swarm.network=<네트워크 이름>` 라벨을 추가합니다.
 
 - `bitwarden`, `flame`처럼 서비스가 하나뿐인 스택은 스택 자체 네트워크 없이 `edge_public`을 기본 네트워크로 씁니다.
 - 앱과 DB처럼 내부 통신이 있는 스택은 기본 네트워크를 유지하고, 공개할 서비스에만 `edge_public`을 추가합니다.
   DB 등 공개하지 않는 서비스는 `edge_public`에 연결하지 않습니다.
 
-서비스가 하나뿐인 스택:
+서비스가 하나뿐인 스택(스택 이름 `app` → `app.nowstart.org`):
 
 ```yaml
 services:
@@ -362,8 +374,6 @@ services:
     deploy:
       labels:
         - traefik.enable=true
-        - traefik.http.routers.app.rule=Host(`app.nowstart.org`)
-        - traefik.http.routers.app.entrypoints=web
         - traefik.http.services.app.loadbalancer.server.port=8080
 
 networks:
@@ -383,8 +393,6 @@ services:
     deploy:
       labels:
         - traefik.enable=true
-        - traefik.http.routers.app.rule=Host(`app.nowstart.org`)
-        - traefik.http.routers.app.entrypoints=web
         - traefik.http.services.app.loadbalancer.server.port=8080
   db:
     image: postgres:18

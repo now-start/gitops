@@ -84,8 +84,6 @@ services:
       labels:
         - traefik.enable=true
         - traefik.swarm.network=portainer_default
-        - traefik.http.routers.portainer.rule=Host(`portainer.nowstart.org`)
-        - traefik.http.routers.portainer.entrypoints=web
         - traefik.http.services.portainer.loadbalancer.server.port=9000
       resources:
         limits:
