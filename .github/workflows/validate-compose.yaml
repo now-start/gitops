@@ -30,6 +30,7 @@ jobs:
       POSTGRES_STANDBY_PASSWORD: test
       POSTGRES_SUPERUSER_PASSWORD: test
       SPRING_ENCRYPT_KEY: test
+      TRAEFIK_DASHBOARD_USERS: test
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

@@ -28,11 +28,6 @@ services:
   bitwarden:
     <<: *service-defaults
     image: vaultwarden/server:1.37.5
-    ports:
-      - target: 80
-        published: 1080
-        protocol: tcp
-        mode: ingress
     environment:
       TZ: Asia/Seoul
       DOMAIN: https://bitwarden.nowstart.org

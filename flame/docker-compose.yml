@@ -28,11 +28,6 @@ services:
   flame:
     <<: *service-defaults
     image: pawelmalak/flame:2.4.0
-    ports:
-      - target: 5005
-        published: 5005
-        protocol: tcp
-        mode: ingress
     environment:
       TZ: Asia/Seoul
       PASSWORD: ${FLAME_PASSWORD:-}

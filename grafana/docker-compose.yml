@@ -28,11 +28,6 @@ services:
   grafana:
     <<: *service-defaults
     image: grafana/otel-lgtm:0.41.0
-    ports:
-      - target: 3000
-        published: 3000
-        protocol: tcp
-        mode: ingress
     environment:
       TZ: Asia/Seoul
       ENABLE_LOGS_GRAFANA: "true"

@@ -334,6 +334,17 @@ Traefik 전용 Docker API 프록시(`socket-proxy`)를 매니저마다 하나씩
 | `portainer.nowstart.org` | `portainer_portainer` | `portainer_default` | `9000`(HTTP) |
 | `bitwarden.nowstart.org` | `bitwarden_bitwarden` | `edge_public` | `80` |
 | `flame.nowstart.org` | `flame_flame` | `edge_public` | `5005` |
+| `traefik.nowstart.org` | Traefik 관리 화면(`api@internal`) | 해당 없음 | 해당 없음 |
+
+Traefik 관리 화면은 라우터·서비스·미들웨어 상태를 보여 주며 `TRAEFIK_DASHBOARD_USERS`로 Basic 인증을 겁니다.
+값은 htpasswd bcrypt 형식입니다. 매니저에서 다음 명령을 실행해 비밀번호를 입력하고, 출력된 `admin:$2y$...`를
+그대로 Portainer 환경 변수에 넣습니다. `$`를 `$$`로 바꾸지 않습니다.
+
+```sh
+docker run --rm -it httpd:2.4-alpine htpasswd -nB admin
+```
+
+관리 화면은 클러스터 내부 구조를 드러내므로 Cloudflare Access를 앞에 함께 두는 것을 권장합니다.
 
 새로 공개할 서비스는 `edge_public`에 연결하고 `deploy.labels`에 라벨을 답니다.
 컨테이너 `labels`가 아닙니다. 라벨을 단 서비스는 곧바로 인터넷에 공개되며, 라우터·서비스 이름은
@@ -391,10 +402,14 @@ networks:
 기존 `bitwarden_default`, `flame_default`는 두 스택을 이 구성으로 재배포한 뒤 남아 있으면
 `docker network rm`으로 정리합니다.
 
-`loadbalancer.server.port`는 컨테이너 내부 포트입니다. Traefik이 overlay로 직접 연결하므로
-Traefik으로만 공개하는 서비스에는 `ports`가 필요 없습니다. 기존 DSM 리버스 프록시가 사용하는
-공개 포트는 해당 도메인이 터널로 정상 동작하는 것을 확인한 뒤 제거합니다.
-`deploy.labels`만 바꾸면 태스크는 재시작되지 않지만, 네트워크를 추가하면 태스크가 다시 생성됩니다.
+`loadbalancer.server.port`는 컨테이너 내부 포트이며 생략할 수 없습니다. Traefik의 Swarm provider는
+컨테이너 포트를 알아내지 못하므로 이 라벨이 없는 서비스는 건너뜁니다. 같은 이유로 `edge_public`에 연결만 하고
+라벨 없이 자동 공개하는 방식은 쓰지 않으며, `traefik.enable=true`로 공개 대상을 명시합니다.
+
+Traefik이 overlay로 직접 연결하므로 Traefik으로만 공개하는 서비스에는 `ports`가 필요 없습니다.
+`bitwarden`, `flame`, `grafana`의 공개 포트는 제거했습니다. 호스트 IP와 포트로 직접 접속하던 경로도 함께
+사라지므로 도메인으로 접속합니다. `portainer`의 `9443`은 edge 장애 때 Tailscale로 접속하는 비상 경로로 남깁니다.
+`deploy.labels`만 바꾸면 태스크는 재시작되지 않지만, 네트워크나 공개 포트를 바꾸면 태스크가 다시 생성됩니다.
 
 - 방문자 쪽 TLS는 Cloudflare Universal SSL이 처리하며 한 단계 서브도메인(`*.nowstart.org`)까지만 적용됩니다.
 - Traefik은 `10.0.0.0/8`에서 온 `X-Forwarded-*`를 신뢰하므로 앱에 `X-Forwarded-Proto: https`가 전달됩니다.
@@ -573,7 +588,7 @@ Renovate가 같은 버전을 즉시 다시 제안하지 않도록 커밋을 되�
 | `flame` | `FLAME_PASSWORD` |
 | `renovate` | `RENOVATE_TOKEN` |
 | `postgres` | `POSTGRES_SUPERUSER_PASSWORD`, `POSTGRES_STANDBY_PASSWORD`, `POSTGRES_ADMIN_PASSWORD`, `PGADMIN_EMAIL`, `PGADMIN_PASSWORD` |
-| `edge` | `CLOUDFLARE_TUNNEL_TOKEN` |
+| `edge` | `CLOUDFLARE_TUNNEL_TOKEN`, `TRAEFIK_DASHBOARD_USERS` |
 
 `.env.example` 템플릿에는 시크릿 변수 이름만 기록합니다.
 실제 `.env` 파일에는 시크릿만 담고 Git 추적에서 제외하며, 값은 Portainer에서 관리합니다.
@@ -594,7 +609,7 @@ Git으로 추적하는 Compose 파일에 둡니다.
 - 배치 가능한 모든 노드는 `NOW_START`의 Tailscale 주소 `100.100.1.1`에서 NFSv4를 마운트할 수 있어야 합니다.
 - DSM NFS 권한은 Tailscale 클라이언트 대역 `100.64.0.0/10`을 허용해야 합니다.
 - 비공개 이미지를 사용하려면 매니저에서 `ghcr.io` 인증을 완료해야 합니다.
-- 공개 포트 `1080`, `3000`, `5005`, `6379`, `8000`, `9443`을 사용할 수 있어야 합니다.
+- 공개 포트 `8000`, `9443`과 CockroachDB 포트(기본 `26257`, `8080`)를 사용할 수 있어야 합니다.
 - pgAdmin을 실행할 매니저 노드에서 host 모드 포트 `5050`을 사용할 수 있어야 합니다.
 
 Tailscale 기반 Swarm을 새로 초기화했다면, 포트를 공개하는 서비스를 배포하기 전에
@@ -632,7 +647,8 @@ POSTGRES_SUPERUSER_PASSWORD=test POSTGRES_STANDBY_PASSWORD=test \
 POSTGRES_ADMIN_PASSWORD=test PGADMIN_EMAIL=test@example.com PGADMIN_PASSWORD=test \
   docker stack config -c postgres/docker-compose.yml >/dev/null
 
-CLOUDFLARE_TUNNEL_TOKEN=test docker stack config -c edge/docker-compose.yml >/dev/null
+CLOUDFLARE_TUNNEL_TOKEN=test TRAEFIK_DASHBOARD_USERS=test \
+  docker stack config -c edge/docker-compose.yml >/dev/null
 ```
 
 배포 후 실제 스케줄러와 네트워크 상태를 확인합니다.

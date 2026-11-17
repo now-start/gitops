@@ -67,6 +67,7 @@ services:
       - --entrypoints.web.address=:80
       - --entrypoints.web.forwardedHeaders.trustedIPs=10.0.0.0/8
       - --entrypoints.web.http.aliasHeadersStrategy=delete
+      - --api.dashboard=true
       - --ping=true
       - --log.level=INFO
       - --accesslog=true
@@ -83,6 +84,16 @@ services:
     deploy:
       <<: *deploy-defaults
       mode: global
+      # 관리 화면. 내장 api@internal을 web 진입점으로 공개하고 Basic 인증을 건다.
+      # Swarm은 포트를 자동으로 찾지 못해 서비스 포트 라벨이 필요하므로 사용하지 않는 값(9999)을 둔다.
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.traefik-dashboard.rule=Host(`traefik.nowstart.org`)
+        - traefik.http.routers.traefik-dashboard.entrypoints=web
+        - traefik.http.routers.traefik-dashboard.service=api@internal
+        - traefik.http.routers.traefik-dashboard.middlewares=traefik-dashboard-auth
+        - traefik.http.middlewares.traefik-dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_USERS:?TRAEFIK_DASHBOARD_USERS is required}
+        - traefik.http.services.traefik-dashboard.loadbalancer.server.port=9999
       resources:
         limits:
           memory: 0.25G
