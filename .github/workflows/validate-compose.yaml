@@ -48,7 +48,6 @@ jobs:
             barosteel/docker-compose.yml
             bitwarden/docker-compose.yml
             chzzk/docker-compose.yml
-            cockroachdb/docker-compose.yml
             edge/docker-compose.yml
             evergreen/docker-compose.yml
             flame/docker-compose.yml

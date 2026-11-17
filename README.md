@@ -33,7 +33,6 @@ actionlint와 기존 Bats 계약 테스트를 실행합니다. 로컬에서도
 | `platform` | `platform/docker-compose.yml` | Config, Eureka, Admin, Gateway | 공통 overlay 생성, `edge_public` |
 | `chzzk` | `chzzk/docker-compose.yml` | nyang-nyang-bot | `platform_default`, Config Server의 Google 키 JSON |
 | `barosteel` | `barosteel/docker-compose.yml` | Barosteel 회원·견적·포인트 서비스; [배포 입력값](barosteel/README.md) | `platform_default`, 기존 DB 시크릿 |
-| `cockroachdb` | `cockroachdb/docker-compose.yml` | 분산 SQL 클러스터 | 노드별 로컬 디스크(NFS 사용 안 함), 매니저 Docker 소켓 |
 | `postgres` | `postgres/docker-compose.yml` | Patroni 기반 PostgreSQL 18, HAProxy와 pgAdmin | `platform_default`, pgAdmin용 `edge_public`, 노드별 로컬 디스크(NFS 사용 안 함) |
 | `edge` | `edge/docker-compose.yml` | Cloudflare Tunnel 커넥터, Traefik 내부 라우터, 조회 전용 Docker API 프록시 | Cloudflare 원격 관리 터널, 매니저 Docker 소켓; `edge_public` 생성 |
 | `evergreen` | `evergreen/docker-compose.yml` | 로또·코인 서비스 | `platform_default` |
@@ -138,8 +137,7 @@ Lotto도 공통 시작 유예 5분을 상속합니다. 직접 검사 방식과 �
 - 시작 유예는 실패 횟수만 유예하며, 그 안에 첫 성공이 발생하면 이후 실패는 집계된다. 검사 완료 후 30초 뒤에 다음 검사를 실행한다. 정상 운영 중 연속 실패 감지는 검사 소요 시간과 장애 발생 시점에 따라 대략 60~180초 걸릴 수 있다. 업데이트·롤백 감시 시간은 5분이며, 시작 유예와 검사 지연이 겹치면 실패 판정이 감시 종료 이후에 발생할 수 있다. `monitor`는 readiness 확인이나 트래픽 전환을 보장하지 않는다.
 - 새 버전 태스크가 업데이트 감시 중 실패하면 롤백한다. 감시가 끝난 뒤 발생한 장애는 재시작 정책의 대상이며 항상 자동 롤백되는 것은 아니다. 롤백도 실패하면 롤백 진행이 멈추고 운영자 확인이 필요하다.
 - 서비스 설정 롤백은 DB 마이그레이션·볼륨·외부 시스템 변경을 되돌리지 않는다. 데이터 형식이 바뀌는 업그레이드는 이전 이미지와의 호환성을 확인해야 한다.
-- 헬스체크가 없는 서비스는 실행 중 응답 불능을 이 설정만으로 감지할 수 없다. CockroachDB는 초기 클러스터 탐색 교착을 피하기 위해 readiness 검사를 Docker healthcheck에 연결하지 않는다.
-- CockroachDB `init`은 일회성 작업이므로 성공 후 종료하는 `on-failure`와 재시도 지연 10초를 유지한다. 상시 서비스 공통값의 대상이 아니다.
+- 헬스체크가 없는 서비스는 실행 중 응답 불능을 이 설정만으로 감지할 수 없다. PostgreSQL 스택의 etcd와 Patroni 멤버는 초기 클러스터 구성 교착을 피하기 위해 Docker healthcheck를 두지 않는다.
 - 상시 서비스 재시작에 횟수 제한이 없으므로 반복 실패는 별도 모니터링이 필요하다. 재시작만으로 설정 오류가 해결되지는 않는다.
 
 기준: [Docker 배포 설정](https://docs.docker.com/reference/compose-file/deploy/), [Docker HEALTHCHECK](https://docs.docker.com/reference/dockerfile/#healthcheck).
@@ -150,7 +148,7 @@ Lotto도 공통 시작 유예 5분을 상속합니다. 직접 검사 방식과 �
 암호화된 Config Server 설정이 필요합니다.
 [배포 안내](barosteel/README.md)를 참고하세요.
 
-1. `grafana`, `platform`, `chzzk`, `cockroachdb`, `postgres`, `edge`, `evergreen`,
+1. `grafana`, `platform`, `chzzk`, `postgres`, `edge`, `evergreen`,
    `bitwarden`, `flame`을 Git 연동 스택으로 생성합니다.
    `portainer` 스택은 자체 업데이트 실패로 관리 기능까지 중단되지 않도록
    수동으로 관리합니다.
@@ -162,58 +160,6 @@ Lotto도 공통 시작 유예 5분을 상속합니다. 직접 검사 방식과 �
    애플리케이션 배포는 불변 이미지 태그 변경으로 수행하므로
    **Re-pull image and redeploy**(이미지 다시 받기 및 재배포)와
    **Force redeployment**(강제 재배포)는 비활성화합니다.
-
-### CockroachDB 클러스터
-
-`cockroachdb` 서비스는 `mode: global`을 사용하므로 Swarm이 배치 가능한
-모든 Swarm 노드에 저장 노드를 하나씩 실행합니다.
-`endpoint_mode: dnsrr`에서 `--join`은 짧은 서비스 DNS 이름인
-`cockroachdb`와 `tasks.cockroachdb`를 사용합니다.
-스택 이름이 접두사로 붙은 서비스 이름은 스택 내부 네트워크에서 해석되지 않기 때문입니다.
-따라서 저장소를 수정하지 않아도 Swarm 노드를 추가하면 CockroachDB 노드가 추가되고,
-노드를 제거하면 CockroachDB가 데이터 범위(range)를 자동으로 다시 복제합니다.
-기본 복제 계수 3에 맞춰 최소 3개의 노드가 있다는 전제하에,
-두 경우 모두 클러스터 가용성을 유지하기 위한 운영자의 별도 조작이 필요하지 않습니다.
-
-단일 복제본 `init` 서비스는 클러스터를 한 번 초기화한 뒤 `Complete` 상태로 남는
-일회성 태스크입니다. Portainer에서는 `0/1`로 표시되지만 정상 상태이며 실패가 아닙니다.
-이 작업은 멱등성을 갖습니다. 서비스 명세 변경, 강제 재배포, 스택 재생성으로 Swarm이
-태스크를 다시 만들어도 이미 초기화된 클러스터를 감지하면 데이터를 건드리지 않고
-성공으로 종료합니다. `cockroachdb_data`는 NFS가 아닌 노드 로컬 볼륨입니다.
-다시 합류한 노드는 저장된 데이터를 사용해 기존 노드 ID로 클러스터에 참여합니다.
-
-영구적으로 제거된 Swarm 노드는 매니저에 고정 배치된 `decommissioner` 서비스가
-자동으로 퇴역 처리합니다. CockroachDB 노드가 비활성 상태이면서 여전히 `active`이고,
-그 노드의 `swarm_node` locality에 해당하는 노드가 `docker node ls`에서
-`Ready`가 아닌 상태로 `GRACE_CHECKS`회 연속 확인된 경우에만 작동합니다
-(기본 유예 시간 1시간). 이때 최소 `MIN_LIVE_NODES`개의 CockroachDB 노드가
-계속 활성 상태여야 합니다(기본값 3).
-이 서비스는 `docker node ls`를 읽어야 하므로 매니저에서 실행하며,
-호스트의 root 권한에 준하는 접근을 허용하는 Docker 소켓을 마운트합니다.
-자동 퇴역 처리를 끄려면 `COCKROACHDB_AUTO_DECOMMISSION=false`로 설정합니다.
-예상 중단 시간이 유예 시간보다 길다면 `COCKROACHDB_DECOMMISSION_GRACE_CHECKS`를 늘립니다.
-자동 퇴역 처리를 끈 경우, 살아 있는 노드의 공개 SQL 포트 26257에 대해
-다음 명령을 수동 대안으로 사용할 수 있습니다.
-
-```sh
-cockroach node status --insecure --host=<surviving-node>:26257
-cockroach node decommission <dead-node-id> --insecure --host=<surviving-node>:26257
-```
-
-퇴역 처리된 노드의 호스트가 기존 `cockroachdb_data` 볼륨을 유지한 채 Swarm에
-다시 합류하면 CockroachDB는 시작을 거부합니다. 새 노드로 합류하도록 해당 호스트의
-볼륨을 삭제해야 합니다. DB 저장소를 자동으로 지우는 동작은 기본값으로 적절하지
-않으므로 이 과정은 자동화하지 않습니다.
-
-`cockroach init`은 예외적으로 RPC 포트 26357을 사용합니다.
-따라서 `init` 서비스는 해당 포트로 접속하며 오버레이 외부에서는 접근할 수 없습니다.
-
-각 Swarm 노드는 SQL 26257과 DB Console 8080을 host 모드로 직접 공개합니다.
-라우팅 메시의 단일 진입점은 없으며 클라이언트는 각 노드에 직접 접속합니다.
-클러스터가 비보안 모드로 동작하므로 이 포트는 신뢰할 수 있는 네트워크에만 공개하세요.
-이 서비스는 의도적으로 상태 검사를 사용하지 않습니다. Swarm은 상태 검사를 통과하기
-전까지 태스크를 서비스 DNS에 등록하지 않지만, CockroachDB의 준비 상태 검사는
-초기화된 클러스터를 요구하므로 초기화 과정이 교착 상태에 빠질 수 있기 때문입니다.
 
 ### PostgreSQL 고가용성 클러스터
 
@@ -675,7 +621,7 @@ Git으로 추적하는 Compose 파일에 둡니다.
 - 배치 가능한 모든 노드는 `NOW_START`의 Tailscale 주소 `100.100.1.1`에서 NFSv4를 마운트할 수 있어야 합니다.
 - DSM NFS 권한은 Tailscale 클라이언트 대역 `100.64.0.0/10`을 허용해야 합니다.
 - 비공개 이미지를 사용하려면 매니저에서 `ghcr.io` 인증을 완료해야 합니다.
-- 공개 포트 `8000`, `9443`과 CockroachDB 포트(기본 `26257`, `8080`)를 사용할 수 있어야 합니다.
+- 공개 포트 `8000`, `9443`을 사용할 수 있어야 합니다.
 - pgAdmin을 실행할 매니저 노드에서 host 모드 포트 `5050`을 사용할 수 있어야 합니다.
 
 Tailscale 기반 Swarm을 새로 초기화했다면, 포트를 공개하는 서비스를 배포하기 전에
