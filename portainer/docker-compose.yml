@@ -76,14 +76,18 @@ services:
         mode: ingress
     volumes:
       - portainer_data:/data
+    # agent와는 스택 기본 네트워크로 통신하고, Traefik은 edge_public으로 연결한다.
+    # agent는 각 노드의 Docker를 제어하므로 edge_public에 연결하지 않는다.
+    networks:
+      - default
+      - edge
     deploy:
       <<: *deploy-defaults
       replicas: 1
-      # portainer 스택은 edge보다 먼저 수동 배포하므로 edge_public에 의존하지 않는다.
-      # edge 스택의 Traefik이 portainer_default로 연결하며, 내부 HTTP 포트 9000을 사용한다.
+      # portainer.nowstart.org로 공개하며 내부 HTTP 포트 9000을 사용한다.
+      # 공개 포트 9443은 edge 장애 때 Tailscale로 접속하는 비상 경로다.
       labels:
         - traefik.enable=true
-        - traefik.swarm.network=portainer_default
         - traefik.http.services.portainer.loadbalancer.server.port=9000
       resources:
         limits:
@@ -99,6 +103,10 @@ networks:
     driver: overlay
     driver_opts:
       com.docker.network.driver.mtu: "1200"
+  # edge 스택이 생성하는 공개 서비스용 overlay.
+  edge:
+    external: true
+    name: edge_public
 
 volumes:
   portainer_data:

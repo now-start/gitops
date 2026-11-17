@@ -28,14 +28,14 @@ actionlint와 기존 Bats 계약 테스트를 실행합니다. 로컬에서도
 
 | 스택 | Compose 경로 | 용도 | 의존성 |
 | --- | --- | --- | --- |
-| `portainer` | `portainer/docker-compose.yml` | Portainer CE 기반 Swarm 관리 | Synology Docker 볼륨 경로, NFS |
+| `portainer` | `portainer/docker-compose.yml` | Portainer CE 기반 Swarm 관리 | `edge_public`, Synology Docker 볼륨 경로, NFS |
 | `grafana` | `grafana/docker-compose.yml` | Grafana LGTM 기반 관측·모니터링 | `platform_default`, NFS |
 | `platform` | `platform/docker-compose.yml` | Config, Eureka, Admin, Gateway | 공통 overlay 생성 |
 | `chzzk` | `chzzk/docker-compose.yml` | nyang-nyang-bot | `platform_default`, NFS |
 | `barosteel` | `barosteel/docker-compose.yml` | Barosteel 회원·견적·포인트 서비스; [배포 입력값](barosteel/README.md) | `platform_default`, 기존 DB 시크릿 |
 | `cockroachdb` | `cockroachdb/docker-compose.yml` | 분산 SQL 클러스터 | 노드별 로컬 디스크(NFS 사용 안 함), 매니저 Docker 소켓 |
 | `postgres` | `postgres/docker-compose.yml` | Patroni 기반 PostgreSQL 18 고가용성 클러스터와 pgAdmin | `platform_default`, 노드별 로컬 디스크(NFS 사용 안 함) |
-| `edge` | `edge/docker-compose.yml` | Cloudflare Tunnel 커넥터, Traefik 내부 라우터, 조회 전용 Docker API 프록시 | `platform_default`, `portainer_default`, Cloudflare 원격 관리 터널, 매니저 Docker 소켓; `edge_public` 생성 |
+| `edge` | `edge/docker-compose.yml` | Cloudflare Tunnel 커넥터, Traefik 내부 라우터, 조회 전용 Docker API 프록시 | `platform_default`, Cloudflare 원격 관리 터널, 매니저 Docker 소켓; `edge_public` 생성 |
 | `evergreen` | `evergreen/docker-compose.yml` | 로또·코인 서비스 | `platform_default` |
 | `bitwarden` | `bitwarden/docker-compose.yml` | Vaultwarden | `edge_public`, NFS |
 | `flame` | `flame/docker-compose.yml` | Flame 대시보드 | `edge_public`, NFS |
@@ -286,31 +286,31 @@ Traefik 전용 Docker API 프록시(`socket-proxy`)를 매니저마다 하나씩
 ```text
 사용자 → Cloudflare 엣지(TLS) → cloudflared → Traefik → 서비스
                                   (edge_public)   │
-                                                  ├─ edge_public: bitwarden, flame, 이후 추가 서비스
+                                                  ├─ edge_public: portainer, bitwarden, flame, 이후 추가 서비스
                                                   ├─ platform_default: platform_gateway, grafana
-                                                  ├─ portainer_default: portainer
                                                   └─ edge_socket(내부 전용): socket-proxy → 매니저 Docker 소켓
 ```
 
 | 네트워크 | 연결 대상 | 용도 |
 | --- | --- | --- |
-| `edge_public` | cloudflared, Traefik, `edge` 뒤에 배포하는 공개 서비스 | 공개 서비스용. `edge` 스택이 이름을 고정해 생성 |
+| `edge_public` | cloudflared, Traefik, Portainer 서버, `edge` 뒤에 배포하는 공개 서비스 | 공개 서비스용. `edge` 스택이 이름을 고정해 생성 |
 | `edge_socket` | Traefik, socket-proxy | 외부 연결이 없는 내부 전용 overlay |
-| `platform_default`, `portainer_default` | Traefik | `edge`보다 먼저 배포되는 기반 스택의 서비스 연결용 |
+| `platform_default` | Traefik | `platform` 스택의 gateway·grafana 연결용 |
 
 - cloudflared는 `edge_public`에만 연결합니다. 데이터베이스 등 공개하지 않는 서비스에는 닿지 않습니다.
 - Traefik은 Docker 소켓을 직접 마운트하지 않습니다. 소켓의 `:ro` 마운트는 API 쓰기 호출을 막지 못하므로,
   socket-proxy가 `GET`·`HEAD`만 통과시키고 Traefik swarm provider가 쓰는 버전·서비스·태스크·네트워크·노드
   조회만 허용합니다.
-- `portainer`는 모든 스택보다 먼저 수동 배포하고, `platform`은 공통 overlay를 만들므로 두 스택은
-  `edge_public`에 의존하지 않습니다. 대신 Traefik이 두 스택의 네트워크에 연결합니다.
-  그 외 공개 서비스는 `edge_public`에 연결합니다.
+- 공개 서비스는 `edge_public`에 연결합니다. Portainer는 서버만 `edge_public`에 연결하고,
+  각 노드의 Docker를 제어하는 agent는 `portainer_default`에만 둡니다.
+- `platform`의 gateway·grafana는 아직 Traefik이 `platform_default`로 연결합니다.
+  이 연결이 남아 있는 동안 `edge`는 `platform_default`에 의존하고, `portainer`는 `edge_public`에 의존합니다.
 
 처음 설정은 다음 순서로 진행합니다.
 
 1. Cloudflare 대시보드 Networking → Tunnels에서 원격 관리 터널을 만들고, 설치 명령의 `--token` 뒤
    문자열을 `CLOUDFLARE_TUNNEL_TOKEN`에 넣습니다. 이미 사용 중인 터널의 토큰을 재사용해도 됩니다.
-2. `portainer_default`, `platform_default`가 있는 상태에서 `edge` 스택을 배포하고,
+2. `platform_default`가 있는 상태에서 `edge` 스택을 배포하고,
    터널 화면에서 커넥터가 매니저 수만큼 연결됐는지 확인합니다.
 3. 터널 route는 `*.nowstart.org` → `HTTP` / `edge_traefik:80` 하나만 둡니다.
    호스트별 개별 route는 지우고 Traefik 라벨로 옮깁니다.
@@ -331,7 +331,7 @@ Traefik 전용 Docker API 프록시(`socket-proxy`)를 매니저마다 하나씩
 | --- | --- | --- | --- |
 | `spring.nowstart.org` | `platform_gateway` | `platform_default` | `8000` |
 | `grafana.nowstart.org` | `grafana_grafana` | `platform_default` | `3000` |
-| `portainer.nowstart.org` | `portainer_portainer` | `portainer_default` | `9000`(HTTP) |
+| `portainer.nowstart.org` | `portainer_portainer` | `edge_public` | `9000`(HTTP) |
 | `bitwarden.nowstart.org` | `bitwarden_bitwarden` | `edge_public` | `80` |
 | `flame.nowstart.org` | `flame_flame` | `edge_public` | `5005` |
 | `traefik.nowstart.org` | Traefik 관리 화면(`api@internal`) | 해당 없음 | 해당 없음 |
@@ -458,13 +458,17 @@ Portainer의 진입점은 `agent`이므로 Docker API 협상 버전은 매니저
 Swarm 태스크가 교체됩니다. 기준 버전 변경을 병합한 뒤 아래 의존 순서에 따라
 스택을 하나씩 재배포·검증하고 폴링을 다시 활성화합니다.
 
-Grafana와 애플리케이션 스택은 플랫폼이 만든 공통 네트워크를 사용하고, `edge`는 `portainer`·`platform`의
-네트워크를, `bitwarden`·`flame`은 `edge`가 만든 `edge_public`을 사용하므로 다음 순서로 배포합니다.
+Grafana와 애플리케이션 스택은 플랫폼이 만든 공통 네트워크를 사용하고, `edge`는 `platform`의 네트워크를,
+`portainer`·`bitwarden`·`flame`은 `edge`가 만든 `edge_public`을 사용하므로 다음 순서로 배포합니다.
 
-1. `portainer`, `platform`
-2. `grafana`, `postgres`, `edge`
-3. `barosteel`, `chzzk`, `evergreen`
-4. `bitwarden`, `flame`
+1. `platform`
+2. `edge`
+3. `portainer`(수동), `grafana`, `postgres`
+4. `barosteel`, `chzzk`, `evergreen`
+5. `bitwarden`, `flame`
+
+Portainer가 없는 새 클러스터에서는 `platform`, `edge`, `portainer`를 매니저에서 `docker stack deploy`로 먼저 배포합니다.
+Traefik의 `platform_default` 연결이 없어지면 `edge`가 다른 스택에 의존하지 않으므로 `edge` → `portainer` → 나머지 순서가 됩니다.
 
 ### `spring`에서 `platform`으로 이전
 
@@ -612,8 +616,7 @@ Git으로 추적하는 Compose 파일에 둡니다.
 - 모든 스택 소유 오버레이 네트워크는 MTU `1200`을 사용합니다. 변경된 스택을 재배포하기 전에 기존 네트워크를 다시 생성하세요.
 - 포트를 공개하는 서비스를 배포하기 전에 Swarm `ingress` 네트워크를 MTU `1200`으로 다시 생성합니다.
 - `grafana`, `postgres`, `edge`, `barosteel`, `chzzk`, `evergreen`을 배포하기 전에 `platform` 스택이 생성한 `platform_default`가 존재해야 합니다.
-- `edge`를 배포하기 전에 `portainer` 스택이 생성한 `portainer_default`도 존재해야 합니다.
-- `bitwarden`, `flame`을 배포하기 전에 `edge` 스택이 생성한 `edge_public`이 존재해야 합니다.
+- `portainer`, `bitwarden`, `flame`을 배포하기 전에 `edge` 스택이 생성한 `edge_public`이 존재해야 합니다.
 - 배치 가능한 모든 노드는 `NOW_START`의 Tailscale 주소 `100.100.1.1`에서 NFSv4를 마운트할 수 있어야 합니다.
 - DSM NFS 권한은 Tailscale 클라이언트 대역 `100.64.0.0/10`을 허용해야 합니다.
 - 비공개 이미지를 사용하려면 매니저에서 `ghcr.io` 인증을 완료해야 합니다.
