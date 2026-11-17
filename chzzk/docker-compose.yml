@@ -26,7 +26,7 @@ x-service-defaults: &service-defaults
 
 services:
   nyang-nyang-bot:
-    image: ghcr.io/now-start/nyang-nyang-bot:5.9.11
+    image: ghcr.io/now-start/nyang-nyang-bot:5.9.12
     user: root
     <<: *service-defaults
     environment:
@@ -34,12 +34,6 @@ services:
       THC_PORT: "8081"
       THC_PATH: /actuator/health/readiness
       SPRING_CONFIG_IMPORT: configserver:http://config:8888
-    # Google 서비스 계정 키. 중앙 설정의 google.spreadsheet.key가 이 경로를 가리킨다.
-    # Docker secret은 매니저 raft에 복제되므로 main NFS가 중단되어도 태스크를 다시 띄울 수 있다.
-    secrets:
-      - source: chzzk_google_sheet_key
-        target: /run/secrets/google-sheet-key.json
-        mode: 0400
     healthcheck:
       <<: *healthcheck-defaults
       test: ["CMD", "/workspace/health-check"]
@@ -51,11 +45,6 @@ services:
           memory: 1G
         reservations:
           memory: 0.75G
-
-# 배포 전에 매니저에서 직접 만든다(README의 chzzk 절 참고). 값은 Git에 두지 않는다.
-secrets:
-  chzzk_google_sheet_key:
-    external: true
 
 networks:
   default:

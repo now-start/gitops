@@ -31,7 +31,7 @@ actionlint와 기존 Bats 계약 테스트를 실행합니다. 로컬에서도
 | `portainer` | `portainer/docker-compose.yml` | Portainer CE 기반 Swarm 관리 | `edge_public`, Synology Docker 볼륨 경로, NFS |
 | `grafana` | `grafana/docker-compose.yml` | Grafana LGTM 기반 관측·모니터링 | `platform_default`, `edge_public`, NFS |
 | `platform` | `platform/docker-compose.yml` | Config, Eureka, Admin, Gateway | 공통 overlay 생성, `edge_public` |
-| `chzzk` | `chzzk/docker-compose.yml` | nyang-nyang-bot | `platform_default`, Docker secret `chzzk_google_sheet_key` |
+| `chzzk` | `chzzk/docker-compose.yml` | nyang-nyang-bot | `platform_default`, Config Server의 Google 키 JSON |
 | `barosteel` | `barosteel/docker-compose.yml` | Barosteel 회원·견적·포인트 서비스; [배포 입력값](barosteel/README.md) | `platform_default`, 기존 DB 시크릿 |
 | `cockroachdb` | `cockroachdb/docker-compose.yml` | 분산 SQL 클러스터 | 노드별 로컬 디스크(NFS 사용 안 함), 매니저 Docker 소켓 |
 | `postgres` | `postgres/docker-compose.yml` | Patroni 기반 PostgreSQL 18 고가용성 클러스터와 pgAdmin | `platform_default`, 노드별 로컬 디스크(NFS 사용 안 함) |
@@ -278,23 +278,20 @@ pgAdmin은 `NOW_START`가 아닌 매니저에 배치하고 5050 포트를 host �
 
 ### chzzk Google 서비스 계정 키
 
-냥냥봇은 Google 시트 동기화에 서비스 계정 키 파일을 사용합니다. 이 키는 main NFS 볼륨이 아니라
-Docker secret `chzzk_google_sheet_key`로 `/run/secrets/google-sheet-key.json`에 읽기 전용으로 마운트합니다.
-Docker secret은 매니저 raft에 복제되므로 main이 중단되어도 다른 노드에서 태스크를 다시 띄울 수 있습니다.
-중앙 설정(platform 저장소 `config/nyang-nyang-bot/nyang-nyang-bot.yaml`)의 `google.spreadsheet.key`가 이 경로를 가리킵니다.
+냥냥봇 5.9.12부터 `google.spreadsheet.key`는 파일 경로가 아니라 서비스 계정 JSON 본문입니다.
+Config Server 저장소에는 JSON 전체를 기존 `/encrypt` API로 암호화한 `{cipher}` 값으로 저장합니다.
+암호화 요청은 `Content-Type: text/plain`으로 보내고 본문에 `{plain}` 접두어를 붙입니다.
+이는 JSON의 중괄호를 암호화 옵션 접두어로 해석하지 않게 합니다. 응답이 순수 암호문인지 확인하고 복호화 결과를 원본 JSON과 비교합니다.
+앱은 복호화된 JSON을 메모리에서 읽으며 NFS 파일이나 Docker secret을 사용하지 않습니다.
+원본 JSON과 복호화된 설정은 Git·로그에 남기지 않습니다.
 
-`chzzk` 스택을 배포하기 전에 매니저에서 secret을 만듭니다. 없으면 스택 배포가 거부됩니다.
-기존 키 파일은 main의 `/volume1/docker/chzzk`에 있습니다.
-
-```sh
-ls /volume1/docker/chzzk
-docker secret create chzzk_google_sheet_key /volume1/docker/chzzk/<키 파일 이름>.json
-```
-
-- secret 값은 Docker에서 다시 꺼낼 수 없습니다. 원본 키 파일은 클러스터 밖 안전한 곳에 따로 보관한 뒤 NFS에서 정리합니다.
-- 키를 바꿀 때는 새 이름(예: `chzzk_google_sheet_key_v2`)으로 secret을 만들고 Compose의 `source`와
-  최상위 `secrets` 이름을 바꿔 배포한 뒤 이전 secret을 지웁니다. 사용 중인 secret은 삭제·수정할 수 없습니다.
-- 전환 후 각 노드에 남은 이전 NFS 볼륨은 `docker volume rm chzzk_chzzk_data`로 정리합니다.
+전환 시 GitOps 폴링을 일시 중지하고 새 이미지 발행과 중앙 설정 변경을 준비합니다.
+기존 5.9.11은 JSON을 읽지 못하고 5.9.12는 파일 경로를 읽지 못하므로,
+냥냥봇을 중지한 뒤 중앙 설정을 반영하고 Config Server가 새 값을 제공하는지 확인한 후
+5.9.12 Compose를 배포합니다. 정상 Google Sheets 동기화를 확인한 뒤 폴링을 재개합니다.
+중앙 설정 저장소의 암호문이 Config Server에 반영되고 새 이미지가 발행되기 전에는 배포하지 않습니다.
+롤백도 앱 버전과 중앙 설정 값을 함께 되돌리고 이전 Docker secret 마운트를 복구해야 합니다.
+기존 `chzzk_google_sheet_key`는 전환 검증과 롤백 기간이 끝난 뒤 삭제합니다.
 
 ### Cloudflare Tunnel과 Traefik
 
@@ -642,7 +639,7 @@ Git으로 추적하는 Compose 파일에 둡니다.
 - 포트를 공개하는 서비스를 배포하기 전에 Swarm `ingress` 네트워크를 MTU `1200`으로 다시 생성합니다.
 - `grafana`, `postgres`, `barosteel`, `chzzk`, `evergreen`을 배포하기 전에 `platform` 스택이 생성한 `platform_default`가 존재해야 합니다.
 - `portainer`, `platform`, `grafana`, `bitwarden`, `flame`을 배포하기 전에 `edge` 스택이 생성한 `edge_public`이 존재해야 합니다.
-- `chzzk`를 배포하기 전에 Docker secret `chzzk_google_sheet_key`가 존재해야 합니다.
+- `chzzk`를 배포하기 전에 Config Server의 `google.spreadsheet.key`에 암호화된 서비스 계정 JSON이 반영되어 있어야 합니다.
 - 배치 가능한 모든 노드는 `NOW_START`의 Tailscale 주소 `100.100.1.1`에서 NFSv4를 마운트할 수 있어야 합니다.
 - DSM NFS 권한은 Tailscale 클라이언트 대역 `100.64.0.0/10`을 허용해야 합니다.
 - 비공개 이미지를 사용하려면 매니저에서 `ghcr.io` 인증을 완료해야 합니다.
