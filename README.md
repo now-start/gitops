@@ -216,22 +216,12 @@ DB와 계정은 pgAdmin이나 `psql`로 만듭니다. `platform_default`는 atta
 `docker run --network`로는 붙을 수 없습니다. 일회성 작업은 `docker service create --network platform_default
 --restart-condition none ...`으로 실행하거나 `pg-*` 컨테이너 콘솔의 `psql`을 사용합니다.
 
-pgAdmin은 `https://pgadmin.nowstart.org`에서 **Synology SSO** 버튼으로 로그인합니다.
-Synology에 pgAdmin 전용 OIDC 앱을 등록하고 콜백을 `https://pgadmin.nowstart.org/oauth2/authorize`로 설정합니다.
-Portainer 환경 변수 `PGADMIN_SSO_CLIENT_ID`·`PGADMIN_SSO_CLIENT_SECRET`에 발급한 값을 넣습니다.
-SSO는 `administrators` 그룹만 허용하고 TLS 인증서 검증과 PKCE(S256)를 사용합니다.
-기존 `PGADMIN_EMAIL`·`PGADMIN_PASSWORD` 로그인은 비상용 pgAdmin 관리자 계정으로 유지합니다.
-SSO 사용자는 별도 계정으로 생성되며, 내부 관리자 계정과 자동으로 합쳐지지 않습니다.
-DB 서버 목록은 공유하되 비밀번호는 포함하지 않습니다. SSO 로그인 후에도 PostgreSQL 계정과 비밀번호가
-필요하며, DB 비밀번호를 저장하려면 pgAdmin의 마스터 비밀번호를 설정해야 합니다.
-기존 와일드카드 Cloudflare Tunnel → Traefik → pgAdmin:80 경로를 사용하며,
-별도의 `pgadmin` DNS 레코드가 있다면 기존 와일드카드 터널과 같은 대상으로 맞춥니다.
-DB와 HAProxy의 5432 포트는 외부에 공개하지 않습니다.
-pgAdmin은 `NOW_START`가 아닌 매니저에 배치하고 기존 5050 host 포트도 유지합니다.
-직접 접속이 필요하면 `docker service ps postgres_pgadmin`으로 실행 노드를 확인한 뒤
-`http://<노드 Tailscale IP>:5050`으로 접속합니다.
-세 멤버와 `primary (HAProxy)` 접속점은 시작할 때 서버 목록에 자동 등록됩니다. pgAdmin은 상태를 저장하지 않으므로
-재시작하면 저장한 비밀번호와 화면 설정이 초기화됩니다.
+pgAdmin은 `https://pgadmin.nowstart.org`에서 **Synology SSO** 버튼으로 로그인하며, `administrators` 그룹만 허용합니다.
+Synology에 pgAdmin 전용 OIDC 앱을 등록하고 콜백을 `https://pgadmin.nowstart.org/oauth2/authorize`로 설정한 뒤
+발급한 값을 `PGADMIN_SSO_CLIENT_ID`·`PGADMIN_SSO_CLIENT_SECRET`에 넣습니다.
+`PGADMIN_EMAIL`·`PGADMIN_PASSWORD`는 SSO 장애에 대비한 비상용 내부 계정이며 SSO 계정과 합쳐지지 않습니다.
+세 멤버와 `primary (HAProxy)`는 시작할 때 서버 목록에 자동 등록되지만, 접속하려면 PostgreSQL 계정과 비밀번호가 필요합니다.
+pgAdmin은 상태를 저장하지 않으므로 재시작하면 저장한 비밀번호와 화면 설정이 초기화됩니다.
 
 남은 제약은 다음과 같습니다.
 
@@ -622,7 +612,6 @@ Git으로 추적하는 Compose 파일에 둡니다.
 - DSM NFS 권한은 Tailscale 클라이언트 대역 `100.64.0.0/10`을 허용해야 합니다.
 - 비공개 이미지를 사용하려면 매니저에서 `ghcr.io` 인증을 완료해야 합니다.
 - 공개 포트 `8000`, `9443`을 사용할 수 있어야 합니다.
-- pgAdmin을 실행할 매니저 노드에서 host 모드 포트 `5050`을 사용할 수 있어야 합니다.
 
 Tailscale 기반 Swarm을 새로 초기화했다면, 포트를 공개하는 서비스를 배포하기 전에
 라우팅 메시 네트워크를 같은 MTU로 다시 생성합니다.
