@@ -366,7 +366,7 @@ Synology는 `email_verified`를 제공하지 않아 이메일 검증 여부 검�
 배포 전에 Portainer의 edge 환경 변수에 다음 값을 설정합니다.
 
 - `TRAEFIK_SSO_CLIENT_SECRET`: 등록한 Synology OIDC 앱의 Client Secret
-- `TRAEFIK_SSO_COOKIE_SECRET`: `openssl rand -base64 32`로 만든 쿠키 암호화 키. 모든 복제본에 같은 값을 사용합니다.
+- `TRAEFIK_SSO_COOKIE_SECRET`: `openssl rand -base64 32 | tr '+/' '-_'`로 만든 쿠키 암호화 키. 모든 복제본에 같은 값을 사용합니다.
 
 기존 `TRAEFIK_DASHBOARD_USERS`는 더 이상 사용하지 않습니다. 쿠키는 HTTPS 전용·HttpOnly이며,
 `traefik.nowstart.org`에만 적용되고 1시간 후 만료됩니다. 쿠키 키 교체 시 기존 세션도 무효화됩니다.

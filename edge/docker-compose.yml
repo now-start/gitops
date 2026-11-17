@@ -145,7 +145,7 @@ services:
       - default
     deploy:
       <<: *deploy-defaults
-      replicas: 2
+      mode: global
       labels:
         - traefik.enable=true
         - traefik.http.routers.traefik-sso.rule=Host(`traefik.nowstart.org`) && PathPrefix(`/oauth2/`)
