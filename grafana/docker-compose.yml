@@ -59,13 +59,15 @@ services:
     healthcheck:
       <<: *healthcheck-defaults
       test: ["CMD", "/otel-lgtm/docker/healthcheck.sh"]
+    # 앱 텔레메트리는 platform_default로 받고, 공개는 edge_public으로 받는다.
+    networks:
+      - default
+      - edge
     deploy:
       <<: *deploy-defaults
       replicas: 1
-      # edge 스택의 Traefik이 platform_default로 연결한다.
       labels:
         - traefik.enable=true
-        - traefik.swarm.network=platform_default
         - traefik.http.services.grafana.loadbalancer.server.port=3000
       resources:
         limits:
@@ -80,6 +82,10 @@ networks:
   default:
     external: true
     name: platform_default
+  # edge 스택이 생성하는 공개 서비스용 overlay.
+  edge:
+    external: true
+    name: edge_public
 
 volumes:
   grafana_data:

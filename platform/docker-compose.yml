@@ -89,13 +89,18 @@ services:
 
   gateway:
     <<: *service-defaults
-    image: ghcr.io/now-start/gateway:6.2.8
+    image: ghcr.io/now-start/gateway:6.2.9
+    # 내부 서비스와는 platform_default로, 공개는 edge_public으로 받는다.
+    # HOSTNAME이 IPv4 두 개로 풀리므로 6.2.9부터 Config Server 기준으로 Hazelcast 주소를 고르고
+    # 그 주소에만 바인딩한다(platform 저장소 docs/network-address-selection.md).
+    networks:
+      - default
+      - edge
     deploy:
       <<: *global-deploy-defaults
-      # edge 스택의 Traefik이 platform_default로 연결한다. 서비스 라벨만 바뀌면 태스크는 재시작되지 않는다.
+      # 도메인(spring)이 스택 이름과 달라 Host 라벨을 유지한다.
       labels:
         - traefik.enable=true
-        - traefik.swarm.network=platform_default
         - traefik.http.routers.platform-gateway.rule=Host(`spring.nowstart.org`)
         - traefik.http.routers.platform-gateway.entrypoints=web
         - traefik.http.services.platform-gateway.loadbalancer.server.port=8000
@@ -118,3 +123,7 @@ networks:
     driver: overlay
     driver_opts:
       com.docker.network.driver.mtu: "1200"
+  # edge 스택이 생성하는 공개 서비스용 overlay. gateway만 연결한다.
+  edge:
+    external: true
+    name: edge_public

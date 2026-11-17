@@ -29,13 +29,13 @@ actionlint와 기존 Bats 계약 테스트를 실행합니다. 로컬에서도
 | 스택 | Compose 경로 | 용도 | 의존성 |
 | --- | --- | --- | --- |
 | `portainer` | `portainer/docker-compose.yml` | Portainer CE 기반 Swarm 관리 | `edge_public`, Synology Docker 볼륨 경로, NFS |
-| `grafana` | `grafana/docker-compose.yml` | Grafana LGTM 기반 관측·모니터링 | `platform_default`, NFS |
-| `platform` | `platform/docker-compose.yml` | Config, Eureka, Admin, Gateway | 공통 overlay 생성 |
+| `grafana` | `grafana/docker-compose.yml` | Grafana LGTM 기반 관측·모니터링 | `platform_default`, `edge_public`, NFS |
+| `platform` | `platform/docker-compose.yml` | Config, Eureka, Admin, Gateway | 공통 overlay 생성, `edge_public` |
 | `chzzk` | `chzzk/docker-compose.yml` | nyang-nyang-bot | `platform_default`, NFS |
 | `barosteel` | `barosteel/docker-compose.yml` | Barosteel 회원·견적·포인트 서비스; [배포 입력값](barosteel/README.md) | `platform_default`, 기존 DB 시크릿 |
 | `cockroachdb` | `cockroachdb/docker-compose.yml` | 분산 SQL 클러스터 | 노드별 로컬 디스크(NFS 사용 안 함), 매니저 Docker 소켓 |
 | `postgres` | `postgres/docker-compose.yml` | Patroni 기반 PostgreSQL 18 고가용성 클러스터와 pgAdmin | `platform_default`, 노드별 로컬 디스크(NFS 사용 안 함) |
-| `edge` | `edge/docker-compose.yml` | Cloudflare Tunnel 커넥터, Traefik 내부 라우터, 조회 전용 Docker API 프록시 | `platform_default`, Cloudflare 원격 관리 터널, 매니저 Docker 소켓; `edge_public` 생성 |
+| `edge` | `edge/docker-compose.yml` | Cloudflare Tunnel 커넥터, Traefik 내부 라우터, 조회 전용 Docker API 프록시 | Cloudflare 원격 관리 터널, 매니저 Docker 소켓; `edge_public` 생성 |
 | `evergreen` | `evergreen/docker-compose.yml` | 로또·코인 서비스 | `platform_default` |
 | `bitwarden` | `bitwarden/docker-compose.yml` | Vaultwarden | `edge_public`, NFS |
 | `flame` | `flame/docker-compose.yml` | Flame 대시보드 | `edge_public`, NFS |
@@ -118,7 +118,7 @@ Spring Boot Admin용 Actuator HTTP/JMX 전체 노출 및 접근 허용, probes�
 Config Server 공통 설정과 새 이미지가 먼저 반영되고 Renovate의 태그 갱신이 적용된 뒤 배포해야 합니다.
 현재 선언된 기존 태그가 이 변경을 포함한다는 뜻이 아니며, 그 전에는 변경된 Compose를 배포하지 마세요.
 
-Admin은 `tasks.platform_admin`으로 Hazelcast 피어를 탐색하며, 중앙 설정의 `app.cluster.local-address=${HOSTNAME}`으로 Docker 호스트명의 overlay 주소를 사용합니다. 플랫폼·앱·Grafana는 `platform_default` overlay를 공유합니다.
+Admin은 `tasks.platform_admin`으로 Hazelcast 피어를 탐색하며, 중앙 설정의 `app.cluster.local-address=${HOSTNAME}`으로 Docker 호스트명의 overlay 주소를 사용합니다. 플랫폼·앱·Grafana는 `platform_default` overlay를 공유합니다. Gateway와 Grafana는 공개용 `edge_public`에도 연결합니다.
 
 Lotto도 공통 시작 유예 5분을 상속합니다. 직접 검사 방식과 검사 간격 30초·제한 30초·연속 실패 3회, 업데이트·롤백 감시 5분은 유지합니다. 시작 유예 중 계속 실패하면 unhealthy 판정이 업데이트 감시 종료 이후에 발생할 수 있습니다.
 
@@ -286,8 +286,7 @@ Traefik 전용 Docker API 프록시(`socket-proxy`)를 매니저마다 하나씩
 ```text
 사용자 → Cloudflare 엣지(TLS) → cloudflared → Traefik → 서비스
                                   (edge_public)   │
-                                                  ├─ edge_public: portainer, bitwarden, flame, 이후 추가 서비스
-                                                  ├─ platform_default: platform_gateway, grafana
+                                                  ├─ edge_public: platform_gateway, grafana, portainer, bitwarden, flame, 이후 추가 서비스
                                                   └─ edge_socket(내부 전용): socket-proxy → 매니저 Docker 소켓
 ```
 
@@ -295,7 +294,6 @@ Traefik 전용 Docker API 프록시(`socket-proxy`)를 매니저마다 하나씩
 | --- | --- | --- |
 | `edge_public` | cloudflared, Traefik, Portainer 서버, `edge` 뒤에 배포하는 공개 서비스 | 공개 서비스용. `edge` 스택이 이름을 고정해 생성 |
 | `edge_socket` | Traefik, socket-proxy | 외부 연결이 없는 내부 전용 overlay |
-| `platform_default` | Traefik | `platform` 스택의 gateway·grafana 연결용 |
 
 - cloudflared는 `edge_public`에만 연결합니다. 데이터베이스 등 공개하지 않는 서비스에는 닿지 않습니다.
 - Traefik은 Docker 소켓을 직접 마운트하지 않습니다. 소켓의 `:ro` 마운트는 API 쓰기 호출을 막지 못하므로,
@@ -303,14 +301,17 @@ Traefik 전용 Docker API 프록시(`socket-proxy`)를 매니저마다 하나씩
   조회만 허용합니다.
 - 공개 서비스는 `edge_public`에 연결합니다. Portainer는 서버만 `edge_public`에 연결하고,
   각 노드의 Docker를 제어하는 agent는 `portainer_default`에만 둡니다.
-- `platform`의 gateway·grafana는 아직 Traefik이 `platform_default`로 연결합니다.
-  이 연결이 남아 있는 동안 `edge`는 `platform_default`에 의존하고, `portainer`는 `edge_public`에 의존합니다.
+- `platform`의 gateway와 `grafana`는 내부 통신용 `platform_default`를 유지하고 `edge_public`을 추가로 연결합니다.
+  gateway는 HOSTNAME이 IPv4 두 개로 풀리므로 6.2.9부터 Config Server와 같은 대역의 주소를 골라 Hazelcast에
+  사용하고 그 주소에만 바인딩합니다(platform 저장소 `docs/network-address-selection.md`).
+- Traefik은 `edge_public`과 `edge_socket`에만 연결합니다. DB 등 `platform_default`의 내부 서비스에는 닿지 않고,
+  `edge`는 다른 스택의 네트워크에 의존하지 않습니다.
 
 처음 설정은 다음 순서로 진행합니다.
 
 1. Cloudflare 대시보드 Networking → Tunnels에서 원격 관리 터널을 만들고, 설치 명령의 `--token` 뒤
    문자열을 `CLOUDFLARE_TUNNEL_TOKEN`에 넣습니다. 이미 사용 중인 터널의 토큰을 재사용해도 됩니다.
-2. `platform_default`가 있는 상태에서 `edge` 스택을 배포하고,
+2. 다른 스택보다 먼저 `edge` 스택을 배포하고,
    터널 화면에서 커넥터가 매니저 수만큼 연결됐는지 확인합니다.
 3. 터널 route는 `*.nowstart.org` → `HTTP` / `edge_traefik:80` 하나만 둡니다.
    호스트별 개별 route는 지우고 Traefik 라벨로 옮깁니다.
@@ -329,8 +330,8 @@ Traefik 전용 Docker API 프록시(`socket-proxy`)를 매니저마다 하나씩
 
 | 호스트 | 서비스 | Traefik 연결 네트워크 | 컨테이너 포트 |
 | --- | --- | --- | --- |
-| `spring.nowstart.org` | `platform_gateway` | `platform_default` | `8000` |
-| `grafana.nowstart.org` | `grafana_grafana` | `platform_default` | `3000` |
+| `spring.nowstart.org` | `platform_gateway` | `edge_public` | `8000` |
+| `grafana.nowstart.org` | `grafana_grafana` | `edge_public` | `3000` |
 | `portainer.nowstart.org` | `portainer_portainer` | `edge_public` | `9000`(HTTP) |
 | `bitwarden.nowstart.org` | `bitwarden_bitwarden` | `edge_public` | `80` |
 | `flame.nowstart.org` | `flame_flame` | `edge_public` | `5005` |
@@ -360,7 +361,8 @@ docker run --rm -it httpd:2.4-alpine htpasswd -nB admin
   예: ``traefik.http.routers.platform-gateway.rule=Host(`spring.nowstart.org`)``
 - 서비스 이름(`<스택 이름>` 자리)은 모든 스택에서 겹치지 않아야 합니다. 같은 이름을 쓰면 서로 다른 서비스가
   하나의 부하 분산 대상으로 합쳐집니다.
-- `edge_public`이 아닌 네트워크로 연결해야 하면 `traefik.swarm.network=<네트워크 이름>` 라벨을 추가합니다.
+- Traefik은 `edge_public`에만 연결하므로 공개할 서비스는 반드시 `edge_public`에 연결합니다.
+  다른 네트워크를 가리키는 `traefik.swarm.network` 라벨은 쓰지 않습니다.
 
 - `bitwarden`, `flame`처럼 서비스가 하나뿐인 스택은 스택 자체 네트워크 없이 `edge_public`을 기본 네트워크로 씁니다.
 - 앱과 DB처럼 내부 통신이 있는 스택은 기본 네트워크를 유지하고, 공개할 서비스에만 `edge_public`을 추가합니다.
@@ -458,17 +460,20 @@ Portainer의 진입점은 `agent`이므로 Docker API 협상 버전은 매니저
 Swarm 태스크가 교체됩니다. 기준 버전 변경을 병합한 뒤 아래 의존 순서에 따라
 스택을 하나씩 재배포·검증하고 폴링을 다시 활성화합니다.
 
-Grafana와 애플리케이션 스택은 플랫폼이 만든 공통 네트워크를 사용하고, `edge`는 `platform`의 네트워크를,
-`portainer`·`bitwarden`·`flame`은 `edge`가 만든 `edge_public`을 사용하므로 다음 순서로 배포합니다.
+`edge`는 다른 스택에 의존하지 않습니다. `portainer`·`platform`·`grafana`·`bitwarden`·`flame`은 `edge`가 만든
+`edge_public`을, Grafana와 애플리케이션 스택은 플랫폼이 만든 `platform_default`를 사용하므로 다음 순서로 배포합니다.
 
-1. `platform`
-2. `edge`
-3. `portainer`(수동), `grafana`, `postgres`
+1. `edge`
+2. `portainer`(수동), `platform`
+3. `grafana`, `postgres`
 4. `barosteel`, `chzzk`, `evergreen`
 5. `bitwarden`, `flame`
 
-Portainer가 없는 새 클러스터에서는 `platform`, `edge`, `portainer`를 매니저에서 `docker stack deploy`로 먼저 배포합니다.
-Traefik의 `platform_default` 연결이 없어지면 `edge`가 다른 스택에 의존하지 않으므로 `edge` → `portainer` → 나머지 순서가 됩니다.
+Portainer가 없는 새 클러스터에서는 `edge`, `portainer`를 매니저에서 `docker stack deploy`로 먼저 배포합니다.
+
+운영 중인 클러스터에서 Traefik의 `platform_default` 연결을 없앨 때는 gateway 6.2.9와 `edge_public` 연결이 반영된
+`platform`·`grafana`를 먼저 배포하고, 두 서비스의 태스크가 `edge_public`에 연결된 것을 확인한 뒤 `edge`를 재배포합니다.
+순서가 바뀌면 그 사이 spring·grafana로 가는 요청이 실패합니다.
 
 ### `spring`에서 `platform`으로 이전
 
@@ -615,8 +620,8 @@ Git으로 추적하는 Compose 파일에 둡니다.
 - Portainer 기본 오버레이는 VXLAN 트래픽을 Tailscale에 맞추기 위해 MTU `1200`을 사용합니다.
 - 모든 스택 소유 오버레이 네트워크는 MTU `1200`을 사용합니다. 변경된 스택을 재배포하기 전에 기존 네트워크를 다시 생성하세요.
 - 포트를 공개하는 서비스를 배포하기 전에 Swarm `ingress` 네트워크를 MTU `1200`으로 다시 생성합니다.
-- `grafana`, `postgres`, `edge`, `barosteel`, `chzzk`, `evergreen`을 배포하기 전에 `platform` 스택이 생성한 `platform_default`가 존재해야 합니다.
-- `portainer`, `bitwarden`, `flame`을 배포하기 전에 `edge` 스택이 생성한 `edge_public`이 존재해야 합니다.
+- `grafana`, `postgres`, `barosteel`, `chzzk`, `evergreen`을 배포하기 전에 `platform` 스택이 생성한 `platform_default`가 존재해야 합니다.
+- `portainer`, `platform`, `grafana`, `bitwarden`, `flame`을 배포하기 전에 `edge` 스택이 생성한 `edge_public`이 존재해야 합니다.
 - 배치 가능한 모든 노드는 `NOW_START`의 Tailscale 주소 `100.100.1.1`에서 NFSv4를 마운트할 수 있어야 합니다.
 - DSM NFS 권한은 Tailscale 클라이언트 대역 `100.64.0.0/10`을 허용해야 합니다.
 - 비공개 이미지를 사용하려면 매니저에서 `ghcr.io` 인증을 완료해야 합니다.
