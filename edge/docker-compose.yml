@@ -86,15 +86,72 @@ services:
     deploy:
       <<: *deploy-defaults
       mode: global
-      # 관리 화면. 내장 api@internal을 web 진입점으로 공개하고 Basic 인증을 건다.
+      # 관리 화면과 API 모두 Synology SSO의 administrators 그룹만 허용한다.
       # Swarm은 포트를 자동으로 찾지 못해 서비스 포트 라벨이 필요하므로 사용하지 않는 값(9999)을 둔다.
       labels:
         - traefik.enable=true
         - traefik.http.routers.traefik-dashboard.rule=Host(`traefik.nowstart.org`)
         - traefik.http.routers.traefik-dashboard.service=api@internal
         - traefik.http.routers.traefik-dashboard.middlewares=traefik-dashboard-auth
-        - traefik.http.middlewares.traefik-dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_USERS:?TRAEFIK_DASHBOARD_USERS is required}
+        - traefik.http.middlewares.traefik-dashboard-auth.forwardauth.address=http://oauth2-proxy:4180/
+        - traefik.http.middlewares.traefik-dashboard-auth.forwardauth.trustForwardHeader=true
+        - traefik.http.middlewares.traefik-dashboard-auth.forwardauth.addAuthCookiesToResponse=__Host-traefik_sso
         - traefik.http.services.traefik-dashboard.loadbalancer.server.port=9999
+      resources:
+        limits:
+          memory: 0.25G
+        reservations:
+          memory: 0.1G
+      placement:
+        constraints:
+          - node.role == manager
+
+  # 인증 성공 시 static://202로 ForwardAuth를 통과시킨다. 실패 시 접근을 차단한다.
+  # /oauth2/만 인증 없이 이 서비스로 보내 로그인/콜백의 인증 루프를 피한다.
+  oauth2-proxy:
+    <<: *service-defaults
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
+    command:
+      - --http-address=0.0.0.0:4180
+      - --provider=oidc
+      - --provider-display-name=Synology SSO
+      - --oidc-issuer-url=https://sso.nowstart.org/webman/sso
+      - --scope=openid email groups
+      - --oidc-groups-claim=groups
+      - --allowed-group=administrators
+      - --email-domain=*
+      # Synology는 email_verified claim을 제공하지 않는다. 권한은 서명 검증된 groups로 제한한다.
+      - --insecure-oidc-allow-unverified-email=true
+      - --insecure-oidc-skip-nonce=false
+      - --code-challenge-method=S256
+      - --redirect-url=https://traefik.nowstart.org/oauth2/callback
+      - --whitelist-domain=traefik.nowstart.org
+      - --reverse-proxy=true
+      - --trusted-proxy-ip=10.0.0.0/8
+      - --upstream=static://202
+      - --skip-provider-button=true
+      - --cookie-name=__Host-traefik_sso
+      - --cookie-secure=true
+      - --cookie-httponly=true
+      - --cookie-samesite=lax
+      - --cookie-expire=1h
+      - --request-logging=false
+    environment:
+      TZ: Asia/Seoul
+      OAUTH2_PROXY_CLIENT_ID: "0c53c799e95016024b559f29610f4d69"
+      OAUTH2_PROXY_CLIENT_SECRET: ${TRAEFIK_SSO_CLIENT_SECRET:?TRAEFIK_SSO_CLIENT_SECRET is required}
+      OAUTH2_PROXY_COOKIE_SECRET: ${TRAEFIK_SSO_COOKIE_SECRET:?TRAEFIK_SSO_COOKIE_SECRET is required}
+    networks:
+      - default
+    deploy:
+      <<: *deploy-defaults
+      replicas: 2
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.traefik-sso.rule=Host(`traefik.nowstart.org`) && PathPrefix(`/oauth2/`)
+        - traefik.http.routers.traefik-sso.priority=100
+        - traefik.http.routers.traefik-sso.service=traefik-sso
+        - traefik.http.services.traefik-sso.loadbalancer.server.port=4180
       resources:
         limits:
           memory: 0.25G

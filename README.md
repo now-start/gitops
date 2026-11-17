@@ -354,15 +354,26 @@ Traefik 전용 Docker API 프록시(`socket-proxy`)를 매니저마다 하나씩
 | `flame.nowstart.org` | `flame_flame` | `edge_public` | `5005` |
 | `traefik.nowstart.org` | Traefik 관리 화면(`api@internal`) | 해당 없음 | 해당 없음 |
 
-Traefik 관리 화면은 라우터·서비스·미들웨어 상태를 보여 주며 `TRAEFIK_DASHBOARD_USERS`로 Basic 인증을 겁니다.
-값은 htpasswd bcrypt 형식입니다. 매니저에서 다음 명령을 실행해 비밀번호를 입력하고, 출력된 `admin:$2y$...`를
-그대로 Portainer 환경 변수에 넣습니다. `$`를 `$$`로 바꾸지 않습니다.
+Traefik 관리 화면과 API는 `oauth2-proxy`의 ForwardAuth로 Synology SSO 인증을 거치며,
+`administrators` 그룹만 접근할 수 있습니다. 로그인/콜백 경로인 `/oauth2/`만 인증 프록시로 직접 보냅니다.
+인증 서비스 장애 시 대시보드 접근은 차단되며, 다른 서비스에는 이 미들웨어를 적용하지 않습니다.
 
-```sh
-docker run --rm -it httpd:2.4-alpine htpasswd -nB admin
-```
+Synology SSO에 등록한 OIDC 앱의 콜백 URL은 `https://traefik.nowstart.org/oauth2/callback`입니다.
+`openid email groups` 범위를 사용하고, issuer·인증·토큰 주소는 모두 HTTPS입니다.
+Synology는 `email_verified`를 제공하지 않아 이메일 검증 여부 검사는 생략하지만,
+토큰 서명·issuer·nonce 검증과 `administrators` 그룹 검사는 유지합니다.
 
-관리 화면은 클러스터 내부 구조를 드러내므로 Cloudflare Access를 앞에 함께 두는 것을 권장합니다.
+배포 전에 Portainer의 edge 환경 변수에 다음 값을 설정합니다.
+
+- `TRAEFIK_SSO_CLIENT_SECRET`: 등록한 Synology OIDC 앱의 Client Secret
+- `TRAEFIK_SSO_COOKIE_SECRET`: `openssl rand -base64 32`로 만든 쿠키 암호화 키. 모든 복제본에 같은 값을 사용합니다.
+
+기존 `TRAEFIK_DASHBOARD_USERS`는 더 이상 사용하지 않습니다. 쿠키는 HTTPS 전용·HttpOnly이며,
+`traefik.nowstart.org`에만 적용되고 1시간 후 만료됩니다. 쿠키 키 교체 시 기존 세션도 무효화됩니다.
+
+배포 후 로그아웃 상태에서 `/dashboard/`와 `/api/overview`가 HTTPS SSO로 이동하는지,
+관리자 로그인은 성공하고 비관리자는 거부되는지 확인합니다. SSO 로그인 전 과정 검증이 끝나기 전에는
+전환 완료로 간주하지 않습니다.
 
 새로 공개할 서비스는 `edge_public`에 연결하고 `deploy.labels`에 라벨 두 개를 답니다.
 컨테이너 `labels`가 아닙니다. 라벨을 단 서비스는 곧바로 인터넷에 공개됩니다.
@@ -622,7 +633,7 @@ Renovate가 같은 버전을 즉시 다시 제안하지 않도록 커밋을 되�
 | `flame` | `FLAME_PASSWORD` |
 | `renovate` | `RENOVATE_TOKEN` |
 | `postgres` | `POSTGRES_SUPERUSER_PASSWORD`, `POSTGRES_STANDBY_PASSWORD`, `POSTGRES_ADMIN_PASSWORD`, `PGADMIN_EMAIL`, `PGADMIN_PASSWORD` |
-| `edge` | `CLOUDFLARE_TUNNEL_TOKEN`, `TRAEFIK_DASHBOARD_USERS` |
+| `edge` | `CLOUDFLARE_TUNNEL_TOKEN`, `TRAEFIK_SSO_CLIENT_SECRET`, `TRAEFIK_SSO_COOKIE_SECRET` |
 
 `.env.example` 템플릿에는 시크릿 변수 이름만 기록합니다.
 실제 `.env` 파일에는 시크릿만 담고 Git 추적에서 제외하며, 값은 Portainer에서 관리합니다.
@@ -681,7 +692,7 @@ POSTGRES_SUPERUSER_PASSWORD=test POSTGRES_STANDBY_PASSWORD=test \
 POSTGRES_ADMIN_PASSWORD=test PGADMIN_EMAIL=test@example.com PGADMIN_PASSWORD=test \
   docker stack config -c postgres/docker-compose.yml >/dev/null
 
-CLOUDFLARE_TUNNEL_TOKEN=test TRAEFIK_DASHBOARD_USERS=test \
+CLOUDFLARE_TUNNEL_TOKEN=test TRAEFIK_SSO_CLIENT_SECRET=test TRAEFIK_SSO_COOKIE_SECRET=test \
   docker stack config -c edge/docker-compose.yml >/dev/null
 ```
 
