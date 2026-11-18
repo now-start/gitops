@@ -271,6 +271,7 @@ services:
   # 다른 노드에서 다시 떠도 같은 화면으로 복구된다.
   # 쓰기 접속점 하나만 공유한다. 복제 상태는 그 아래 Replica Nodes에서 본다.
   # SharedUsername을 두지 않으므로 SSO 사용자는 자신의 PostgreSQL 롤을 직접 지정한다.
+  # 공유 그룹은 사용자 기본 그룹(Servers)과 따로 표시되므로 구분되는 이름을 쓴다.
   pgadmin:
     <<: *service-defaults
     image: dpage/pgadmin4:9.19.0
@@ -280,7 +281,7 @@ services:
         cat > /tmp/servers.json <<'EOF'
         {
           "Servers": {
-            "1": {"Name": "primary (HAProxy)", "Group": "Servers", "Host": "postgres_haproxy", "Port": 5432, "MaintenanceDB": "postgres", "Username": "postgres", "SSLMode": "prefer", "Shared": true}
+            "1": {"Name": "primary (HAProxy)", "Group": "PostgreSQL", "Host": "postgres_haproxy", "Port": 5432, "MaintenanceDB": "postgres", "Username": "postgres", "SSLMode": "prefer", "Shared": true}
           }
         }
         EOF
