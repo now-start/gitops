@@ -26,11 +26,11 @@ x-service-defaults: &service-defaults
 
 services:
   barosteel:
-    image: ghcr.io/now-start/barosteel:0.3.0
+    image: ghcr.io/now-start/barosteel:0.3.1
     user: root
     <<: *service-defaults
     environment:
-      TZ: Asia/Seoul
+      TZ: UTC
       THC_PORT: "8081"
       THC_PATH: /actuator/health/readiness
       SPRING_CONFIG_IMPORT: configserver:http://config:8888
