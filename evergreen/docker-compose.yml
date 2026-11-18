@@ -52,7 +52,7 @@ services:
 
   coin:
     <<: *service-defaults
-    image: ghcr.io/now-start/evergreen:2.2.7
+    image: ghcr.io/now-start/evergreen:3.0.0
     environment:
       <<: *environment-defaults
       # Empty uses socket.gethostname() and overrides Spring-only placeholders.
