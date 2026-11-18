@@ -2,7 +2,7 @@ x-deploy-defaults: &deploy-defaults
   update_config:
     parallelism: 1
     order: stop-first
-    failure_action: rollback
+    failure_action: pause
     monitor: 5m
     delay: 10s
   rollback_config:
@@ -39,7 +39,7 @@ services:
       test: ["CMD", "/workspace/health-check"]
     deploy:
       <<: *deploy-defaults
-      replicas: 1
+      replicas: 0
       resources:
         limits:
           memory: 1G
