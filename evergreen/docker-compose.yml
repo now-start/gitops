@@ -52,13 +52,21 @@ services:
 
   coin:
     <<: *service-defaults
-    image: ghcr.io/now-start/evergreen:2.2.7
+    image: ghcr.io/now-start/evergreen:3.0.0
     environment:
       <<: *environment-defaults
       # Empty uses socket.gethostname() and overrides Spring-only placeholders.
       EUREKA_INSTANCE_HOSTNAME: ""
+      EVERGREEN_EXECUTION_LIVE_ENABLED: "false"
     deploy:
       <<: *deploy-defaults
+      # 3.x uses PostgreSQL; an automatic rollback to 2.x cannot use that database.
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: pause
+        monitor: 5m
+        delay: 10s
       replicas: 1
       resources:
         limits:
