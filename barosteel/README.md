@@ -11,7 +11,7 @@ Config Server의 `barosteel.yaml`에서 DB와 `barosteel.session.shared: true`�
 DB 연결 풀과 DB 처리 용량은 전체 인스턴스 수에 맞게 산정한다.
 
 현재 선언된 태그가 이번 로컬 변경을 포함한다는 뜻은 아니다. 프로젝트 버전 변경으로 CI가 새 이미지를 발행한 후 Renovate의 태그 갱신을 반영한다.
-Config 저장소 반영, 실제 Eureka/Gateway/Swarm 연결과 MariaDB 검증은 배포 전에 수행한다.
+Config 저장소 반영, 실제 Eureka/Gateway/Swarm 연결과 PostgreSQL(`postgres_haproxy`의 `barosteel` DB) 검증은 배포 전에 수행한다.
 실제 운영 배포는 별도 검증한다. 관련 작업: barosteel #45, #46. 운영 검증: #12.
 
 ## 생존 및 준비 상태 검사
