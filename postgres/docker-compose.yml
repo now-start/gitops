@@ -269,6 +269,8 @@ services:
 
   # 서버 목록은 시작할 때마다 다시 만든다. 상태를 저장하지 않으므로
   # 다른 노드에서 다시 떠도 같은 화면으로 복구된다.
+  # 쓰기 접속점 하나만 공유한다. 복제 상태는 그 아래 Replica Nodes에서 본다.
+  # SharedUsername을 두지 않으므로 SSO 사용자는 자신의 PostgreSQL 롤을 직접 지정한다.
   pgadmin:
     <<: *service-defaults
     image: dpage/pgadmin4:9.19.0
@@ -278,10 +280,7 @@ services:
         cat > /tmp/servers.json <<'EOF'
         {
           "Servers": {
-            "1": {"Name": "pg-a", "Group": "postgres", "Host": "pg-a", "Port": 5432, "MaintenanceDB": "postgres", "Username": "postgres", "SSLMode": "prefer", "Shared": true},
-            "2": {"Name": "pg-b", "Group": "postgres", "Host": "pg-b", "Port": 5432, "MaintenanceDB": "postgres", "Username": "postgres", "SSLMode": "prefer", "Shared": true},
-            "3": {"Name": "pg-c", "Group": "postgres", "Host": "pg-c", "Port": 5432, "MaintenanceDB": "postgres", "Username": "postgres", "SSLMode": "prefer", "Shared": true},
-            "4": {"Name": "primary (HAProxy)", "Group": "postgres", "Host": "postgres_haproxy", "Port": 5432, "MaintenanceDB": "postgres", "Username": "postgres", "SSLMode": "prefer", "Shared": true}
+            "1": {"Name": "primary (HAProxy)", "Group": "Servers", "Host": "postgres_haproxy", "Port": 5432, "MaintenanceDB": "postgres", "Username": "postgres", "SSLMode": "prefer", "Shared": true}
           }
         }
         EOF
@@ -296,6 +295,12 @@ services:
       PGADMIN_SSO_CLIENT_ID: ${PGADMIN_SSO_CLIENT_ID:?PGADMIN_SSO_CLIENT_ID is required}
       PGADMIN_SSO_CLIENT_SECRET: ${PGADMIN_SSO_CLIENT_SECRET:?PGADMIN_SSO_CLIENT_SECRET is required}
       PGADMIN_CONFIG_AUTHENTICATION_SOURCES: "['oauth2', 'internal']"
+      # SSO 사용자에게 마스터 비밀번호를 묻지 않는다. 대신 DB 비밀번호를 저장하지 않으며,
+      # 상태를 저장하지 않는 구성이라 저장해도 재시작하면 사라진다.
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      # 스키마와 쿼리 결과가 외부 LLM API로 전송되지 않도록 AI 기능을 끈다.
+      # 사용자가 환경설정에서 다시 켤 수 없다.
+      PGADMIN_CONFIG_LLM_ENABLED: "False"
       # 환경 변수에서 읽어 시크릿의 따옴표 등이 Python 설정 문법을 깨지 않게 한다.
       PGADMIN_CONFIG_OAUTH2_CONFIG: >-
         [{'OAUTH2_NAME': 'synology',
@@ -305,9 +310,8 @@ services:
         'OAUTH2_SERVER_METADATA_URL': 'https://sso.nowstart.org/webman/sso/.well-known/openid-configuration',
         'OAUTH2_API_BASE_URL': 'https://sso.nowstart.org/webman/sso/',
         'OAUTH2_USERINFO_ENDPOINT': 'SSOUserInfo.cgi',
-        'OAUTH2_SCOPE': 'openid email groups',
+        'OAUTH2_SCOPE': 'openid email',
         'OAUTH2_USERNAME_CLAIM': 'sub',
-        'OAUTH2_ADDITIONAL_CLAIMS': {'groups': ['administrators']},
         'OAUTH2_CHALLENGE_METHOD': 'S256',
         'OAUTH2_RESPONSE_TYPE': 'code'}]
     networks:

@@ -216,12 +216,15 @@ DB와 계정은 pgAdmin이나 `psql`로 만듭니다. `platform_default`는 atta
 `docker run --network`로는 붙을 수 없습니다. 일회성 작업은 `docker service create --network platform_default
 --restart-condition none ...`으로 실행하거나 `pg-*` 컨테이너 콘솔의 `psql`을 사용합니다.
 
-pgAdmin은 `https://pgadmin.nowstart.org`에서 **Synology SSO** 버튼으로 로그인하며, `administrators` 그룹만 허용합니다.
+pgAdmin은 `https://pgadmin.nowstart.org`에서 **Synology SSO** 버튼으로 로그인하며, 모든 Synology 계정을 허용합니다.
+DB 권한은 pgAdmin 계정이 아니라 접속한 PostgreSQL 롤이 정하므로, 사용자마다 롤을 따로 만들고 `postgres` 계정은 공유하지 않습니다.
 Synology에 pgAdmin 전용 OIDC 앱을 등록하고 콜백을 `https://pgadmin.nowstart.org/oauth2/authorize`로 설정한 뒤
 발급한 값을 `PGADMIN_SSO_CLIENT_ID`·`PGADMIN_SSO_CLIENT_SECRET`에 넣습니다.
 `PGADMIN_EMAIL`·`PGADMIN_PASSWORD`는 SSO 장애에 대비한 비상용 내부 계정이며 SSO 계정과 합쳐지지 않습니다.
-세 멤버와 `primary (HAProxy)`는 시작할 때 서버 목록에 자동 등록되지만, 접속하려면 PostgreSQL 계정과 비밀번호가 필요합니다.
-pgAdmin은 상태를 저장하지 않으므로 재시작하면 저장한 비밀번호와 화면 설정이 초기화됩니다.
+서버 목록에는 `primary (HAProxy)` 하나만 자동 등록되며, 복제 상태는 그 아래 Replica Nodes에서 확인합니다.
+SSO 사용자는 서버 속성의 사용자명을 자신의 롤로 지정해 접속합니다.
+SSO 사용자에게는 마스터 비밀번호를 묻지 않는 대신 DB 비밀번호를 저장하지 않고, LLM(AI) 기능은 외부 전송을 막기 위해 끕니다.
+pgAdmin은 상태를 저장하지 않으므로 재시작하면 화면 설정과 직접 등록한 서버가 초기화됩니다.
 
 남은 제약은 다음과 같습니다.
 
