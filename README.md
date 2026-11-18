@@ -234,6 +234,49 @@ pgAdmin은 상태를 저장하지 않으므로 재시작하면 화면 설정과 
 - PostgreSQL 메이저 버전 변경은 `pg_upgrade`가 필요하므로 이미지 교체만으로 진행하지 않습니다.
 - etcd 멤버 영구 교체(`etcdctl member remove/add`)는 수동으로 진행합니다.
 
+### PostgreSQL 애플리케이션 DB 추가
+
+애플리케이션마다 전용 롤과 데이터베이스를 하나씩 만듭니다. PostgreSQL의 데이터베이스는 연결 단위로 분리되므로
+다른 앱의 데이터뿐 아니라 테이블 이름도 보이지 않습니다. 한 데이터베이스 안에 앱별 스키마를 두는 방식은
+앱 사이에 SQL 조인이 필요할 때만 사용합니다.
+PostgreSQL 15부터 `public` 스키마의 소유자는 DB 소유자(`pg_database_owner`)이므로,
+DB 소유자를 앱 롤로 지정하면 앱은 추가 설정 없이 `public`에 객체를 만듭니다.
+
+pgAdmin Query Tool에서 `postgres` 계정으로 한 문장씩 실행합니다. `CREATE DATABASE`는 트랜잭션 안에서 실행할 수 없습니다.
+Spilo는 `log_statement: 'ddl'`이 기본값이라 `CREATE ROLE ... PASSWORD`의 비밀번호가 CSV 로그에 평문으로 남으므로,
+같은 세션에서 `SET log_statement = 'none';`을 먼저 실행합니다. 비밀번호는 `openssl rand -hex 24`로 만듭니다.
+
+```sql
+SET log_statement = 'none';
+CREATE ROLE app_name LOGIN PASSWORD 'generated-password' CONNECTION LIMIT 20;
+CREATE DATABASE app_name OWNER app_name;
+REVOKE ALL ON DATABASE app_name FROM PUBLIC;
+```
+
+`REVOKE`는 다른 롤의 접속을 막으며, 소유자인 앱 롤은 영향을 받지 않습니다. 애플리케이션은 다음 주소로 접속합니다.
+
+```text
+jdbc:postgresql://postgres_haproxy:5432/app_name?targetServerType=primary&connectTimeout=3
+```
+
+개발자 조회 권한은 앱마다 그룹 롤을 만들어 부여합니다. 테이블 권한은 해당 DB에 접속한 뒤 부여하며,
+앱 롤이 마이그레이션으로 나중에 만드는 테이블에도 적용되도록 `FOR ROLE`을 지정합니다.
+
+```sql
+CREATE ROLE app_name_read;
+GRANT CONNECT ON DATABASE app_name TO app_name_read;
+GRANT app_name_read TO developer_role;
+-- app_name DB에 접속한 뒤 실행합니다.
+GRANT USAGE ON SCHEMA public TO app_name_read;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO app_name_read;
+ALTER DEFAULT PRIVILEGES FOR ROLE app_name IN SCHEMA public GRANT SELECT ON TABLES TO app_name_read;
+```
+
+- DB 소유자는 자기 DB를 삭제할 수 있습니다. 앱이 이 권한까지 갖지 않게 하려면 소유·마이그레이션 롤과 실행용 롤을 나눕니다.
+- 개발자에게 `pg_read_all_data`를 부여하지 않습니다. 모든 DB에 적용되어 `postgres` DB의 Spilo 로그 테이블까지 읽을 수 있습니다.
+- 모든 앱이 CPU, 메모리, 커넥션을 공유합니다. 앱별 커넥션 풀 크기의 합이 `max_connections`(`SHOW max_connections`)를
+  넘지 않도록 `CONNECTION LIMIT`과 풀 크기를 맞춥니다.
+
 ### chzzk Google 서비스 계정 키
 
 냥냥봇 5.9.12부터 `google.spreadsheet.key`는 파일 경로가 아니라 서비스 계정 JSON 본문입니다.
