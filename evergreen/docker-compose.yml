@@ -57,7 +57,6 @@ services:
       <<: *environment-defaults
       # Empty uses socket.gethostname() and overrides Spring-only placeholders.
       EUREKA_INSTANCE_HOSTNAME: ""
-      EVERGREEN_EXECUTION_LIVE_ENABLED: "false"
     deploy:
       <<: *deploy-defaults
       # 3.x uses PostgreSQL; an automatic rollback to 2.x cannot use that database.
