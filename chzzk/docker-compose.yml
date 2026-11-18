@@ -26,11 +26,11 @@ x-service-defaults: &service-defaults
 
 services:
   nyang-nyang-bot:
-    image: ghcr.io/now-start/nyang-nyang-bot:5.9.12
+    image: ghcr.io/now-start/nyang-nyang-bot:6.0.0
     user: root
     <<: *service-defaults
     environment:
-      TZ: Asia/Seoul
+      TZ: UTC
       THC_PORT: "8081"
       THC_PATH: /actuator/health/readiness
       SPRING_CONFIG_IMPORT: configserver:http://config:8888
@@ -39,7 +39,7 @@ services:
       test: ["CMD", "/workspace/health-check"]
     deploy:
       <<: *deploy-defaults
-      replicas: 0
+      replicas: 1
       resources:
         limits:
           memory: 1G
