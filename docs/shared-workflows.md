@@ -93,8 +93,9 @@ Docker image:  ghcr.io/now-start/{repository}:5.9.8
 ## Java 멀티 아키텍처 이미지
 
 Java 이미지는 `ubuntu-24.04`(AMD64), `ubuntu-24.04-arm`(ARM64) 러너에서
-각각 `bootBuildImage --imagePlatform`으로 빌드합니다. 프로젝트의 builder/run image는
-두 아키텍처를 지원해야 합니다. Gradle에 지정한 run image는 유지합니다.
+각각 `bootBuildImage --imagePlatform`으로 빌드합니다. 두 러너는 공통 워크플로의
+`BUILDER_IMAGE`에 고정한 Paketo 빌더를 사용합니다. Gradle에서 지정하는 run image도
+두 아키텍처를 지원해야 합니다.
 
 - 중간 이미지: `build-{source-sha}-amd64`, `build-{source-sha}-arm64`
 - 배포 이미지: `{version}` (두 아키텍처를 포함한 manifest index)
@@ -111,7 +112,7 @@ Java 이미지는 `ubuntu-24.04`(AMD64), `ubuntu-24.04-arm`(ARM64) 러너에서
 
 - PR, `develop` push, 수동 실행: locked uv 설치, 포맷/lint/타입/테스트/취약점 검사
 - `main` push: 새 버전일 때만 같은 검사 후 amd64/arm64 버전 이미지와 GitHub Release 발행
-- `uv-version` 입력 기본값: `0.11.3`
+- `uv-version`을 생략하면 [Python 테스트 워크플로](../.github/workflows/reusable-python-test.yaml)의 `DEFAULT_UV_VERSION`을 사용합니다.
 - `registry-password` Secret: 호출 저장소의 `GITHUB_TOKEN`
 
 Java와 동일하게 `app`은 단계 연결만 담당하고, 실제 작업은 역할별 workflow로

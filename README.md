@@ -553,7 +553,12 @@ Docker Compose의 모든 이미지에는 자체 레지스트리 여부와 관계
 `Validate Workflows`와 해당 변경에 필요한 검사를 통과하면 자동 병합됩니다.
 메이저 업데이트와 다이제스트만 바뀌는 업데이트는 수동 검토·병합용 PR을 만듭니다.
 
-`platformAutomerge`가 꺼져 있으므로 검사 통과 후 Renovate가 직접 병합합니다.
+Python 테스트의 uv 기본 버전과 워크플로 검사에 쓰는 actionlint 버전도 Renovate가 갱신합니다.
+Java 빌드에 쓰는 Paketo 빌더의 태그와 인덱스 다이제스트는 같은 PR에서 갱신합니다.
+`Validate Java Builder`는 레지스트리의 태그가 고정된 다이제스트를 가리키고 Linux AMD64와 ARM64 이미지를 모두 포함하는지 검사합니다.
+빌더의 마이너·패치 업데이트도 CI 통과 후 Renovate가 자동 병합합니다.
+
+`platformAutomerge`가 꺼져 있으므로 자동 병합 대상은 검사 통과 후 Renovate가 직접 병합합니다.
 따라서 자동 병합은 PR을 만든 검사 회차가 아닌 다음 검사 회차에서 이루어지며,
 60초 대기 간격으로 인해 대략 1분이 추가됩니다.
 
@@ -759,7 +764,7 @@ CI 이미지 발행 → Renovate DEV PR → 병합 → Portainer DEV 배포·검
 
 배지와 측정 SHA는 `jacoco-badge-<module 또는 root>` 산출물에 보관한다. 성공한 최신 main 빌드만 별도의 쓰기 권한 job에서 `coverage` 브랜치를 갱신한다. 루트는 `jacoco.svg`, `jacoco-branches.svg`, `summary.json`, 모듈은 `<module>/` 아래에 저장하며 다른 모듈의 배지는 보존한다. PR은 산출물만 생성한다. 기존 버전 정책으로 build가 생략되면 커버리지도 갱신되지 않는다.
 
-Java 이미지 builder는 AMD64/ARM64가 모두 검증된 `builder-noble-java-tiny:0.0.200`의 index digest로 고정한다. 2026-10-24 확인한 `latest`는 ARM64 단일 manifest여서 AMD64 빌드가 실패했다. builder 갱신 시 두 플랫폼과 실제 이미지 빌드를 함께 확인한다.
+Java 이미지 빌더는 [Java Docker 워크플로](.github/workflows/reusable-java-docker.yaml)의 `BUILDER_IMAGE`에서 태그와 멀티아키텍처 인덱스 다이제스트로 고정합니다. 2026-10-24에는 `latest`가 ARM64 단일 manifest를 가리켜 AMD64 빌드가 실패했습니다.
 
 ### 공통 overlay 전환
 

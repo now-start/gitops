@@ -30,10 +30,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install validation tools
+        env:
+          # renovate: datasource=github-releases depName=rhysd/actionlint
+          ACTIONLINT_VERSION: "v1.7.12"
         run: |
           sudo apt-get update
           sudo apt-get install --yes bats ruby jq
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Validate workflows and release contracts

@@ -4,7 +4,7 @@ setup() {
   WORKFLOW="$BATS_TEST_DIRNAME/../../.github/workflows/reusable-java-docker.yaml"
   export PATH="$BATS_TEST_DIRNAME/../fixtures/multiarch:$PATH"
   export MOCK_LOG="$BATS_TEST_TMPDIR/docker.log" MOCK_CREATED="$BATS_TEST_TMPDIR/created"
-  export REGISTRY_ORG=ghcr.io/example REPO_NAME=app MODULE='' VERSION=1.2.3
+  export MODULE='' VERSION=1.2.3
   export SOURCE_SHA=0123456789abcdef TAG_EXISTS=false REGISTRY_USER=bot REGISTRY_PASSWORD=test
   export IMAGE_NAME=ghcr.io/example/app ARCH=arm64 SOURCE_URL=https://github.com/example/app
   export GITHUB_STEP_SUMMARY="$BATS_TEST_TMPDIR/summary"
@@ -21,7 +21,11 @@ run_step() {
 }
 
 publish() { run_step publish 'Publish and verify multi-platform image'; }
-build() { run_step docker 'Build and push architecture image'; }
+build() {
+  BUILDER_IMAGE=$(ruby -ryaml -e 'puts YAML.load_file(ARGV[0]).fetch("jobs").fetch("docker").fetch("env").fetch("BUILDER_IMAGE")' "$WORKFLOW")
+  export BUILDER_IMAGE
+  run_step docker 'Build and push architecture image'
+}
 
 @test "publish combines verified digest-pinned architectures then verifies final index" {
   publish
@@ -162,11 +166,12 @@ exit 42
   [ "$status" -eq 0 ]
 }
 
-@test "AMD64 build uses the verified multiarch builder instead of broken latest" {
+@test "AMD64 build passes the versioned Paketo builder and its digest to Gradle" {
   export ARCH=amd64
   build
   [ "$status" -eq 0 ]
   grep -F -- '--imagePlatform=linux/amd64' gradle-call
-  grep -F -- '--builder=docker.io/paketobuildpacks/builder-noble-java-tiny:0.0.200@sha256:7c62dd7e66b277ec9fa2b60d0ad74c4e9ef15db7910dcdf51126e62a02a31463' gradle-call
+  [[ "$BUILDER_IMAGE" =~ ^docker\.io/paketobuildpacks/builder-noble-java-tiny:[0-9]+\.[0-9]+\.[0-9]+@sha256:[a-f0-9]{64}$ ]]
+  grep -F -- "--builder=$BUILDER_IMAGE " gradle-call
   grep -F 'push ghcr.io/example/app:build-0123456789abcdef-amd64' "$MOCK_LOG"
 }

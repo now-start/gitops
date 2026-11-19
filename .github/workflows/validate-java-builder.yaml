@@ -1,0 +1,29 @@
+name: Validate Java Builder
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/reusable-java-docker.yaml"
+      - ".github/workflows/validate-java-builder.yaml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/reusable-java-docker.yaml"
+      - ".github/workflows/validate-java-builder.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Verify pinned builder digest and Linux platforms
+        run: |
+          builder=$(ruby -ryaml -e 'puts YAML.load_file(ARGV[0]).fetch("jobs").fetch("docker").fetch("env").fetch("BUILDER_IMAGE")' .github/workflows/reusable-java-docker.yaml)
+          docker buildx imagetools inspect "${builder%@*}" --format '{{json .Manifest}}' |
+            jq -e --arg digest "${builder##*@}" '
+              .digest == $digest and
+              ([.manifests[] | select(.platform.os == "linux") | .platform.architecture] | contains(["amd64", "arm64"]))'

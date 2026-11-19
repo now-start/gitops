@@ -6,7 +6,6 @@ on:
       uv-version:
         description: uv version used for dependency installation and checks
         type: string
-        default: "0.11.3"
 
 permissions:
   contents: read
@@ -15,6 +14,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # renovate: datasource=github-releases depName=astral-sh/uv
+      DEFAULT_UV_VERSION: "0.11.3"
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -22,7 +24,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: ${{ inputs.uv-version }}
+          version: ${{ inputs.uv-version || env.DEFAULT_UV_VERSION }}
           enable-cache: true
 
       - name: Install dependencies
