@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 20
     env:
       # renovate: datasource=github-releases depName=astral-sh/uv
-      DEFAULT_UV_VERSION: "0.11.3"
+      DEFAULT_UV_VERSION: "0.13.9"
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
