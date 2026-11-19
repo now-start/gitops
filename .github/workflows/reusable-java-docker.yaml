@@ -48,7 +48,7 @@ jobs:
   docker:
     env:
       MODULE: ${{ inputs.module }}
-      BUILDER_IMAGE: docker.io/paketobuildpacks/builder-noble-java-tiny:0.0.200@sha256:7c62dd7e66b277ec9fa2b60d0ad74c4e9ef15db7910dcdf51126e62a02a31463
+      BUILDER_IMAGE: docker.io/paketobuildpacks/builder-noble-java-tiny:0.0.218@sha256:cd34e9cb5f55980b902d9b1c4a354a720b407a512b80caef9e70791b4ab6dbf6
     strategy:
       fail-fast: false
       matrix:
