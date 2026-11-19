@@ -9,6 +9,9 @@ setup() {
   export IMAGE_NAME=ghcr.io/example/app ARCH=arm64 SOURCE_URL=https://github.com/example/app
   export GITHUB_STEP_SUMMARY="$BATS_TEST_TMPDIR/summary"
   export RUNNER_TEMP="$BATS_TEST_TMPDIR"
+  # GitHub Actions injects workflow-level env into steps; mirror it from the single source.
+  PAKETO_BUILDER_IMAGE="$(ruby -ryaml -e 'puts YAML.load_file(ARGV[0]).fetch("env").fetch("PAKETO_BUILDER_IMAGE")' "$WORKFLOW")"
+  export PAKETO_BUILDER_IMAGE
   cd "$BATS_TEST_TMPDIR"
   printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" > gradle-call\n' > gradlew
   chmod +x gradlew
@@ -162,11 +165,17 @@ exit 42
   [ "$status" -eq 0 ]
 }
 
-@test "AMD64 build uses the verified multiarch builder instead of broken latest" {
+@test "builder is pinned once by version tag and index digest instead of broken latest" {
+  [[ "$PAKETO_BUILDER_IMAGE" =~ ^docker\.io/paketobuildpacks/builder-noble-java-tiny:[0-9]+\.[0-9]+\.[0-9]+@sha256:[0-9a-f]{64}$ ]]
+  run grep -c 'paketobuildpacks/builder-noble-java-tiny' "$WORKFLOW"
+  [ "$output" -eq 1 ]
+}
+
+@test "AMD64 build passes the workflow builder to Gradle" {
   export ARCH=amd64
   build
   [ "$status" -eq 0 ]
   grep -F -- '--imagePlatform=linux/amd64' gradle-call
-  grep -F -- '--builder=docker.io/paketobuildpacks/builder-noble-java-tiny:0.0.200@sha256:7c62dd7e66b277ec9fa2b60d0ad74c4e9ef15db7910dcdf51126e62a02a31463' gradle-call
+  grep -F -- "--builder=$PAKETO_BUILDER_IMAGE " gradle-call
   grep -F 'push ghcr.io/example/app:build-0123456789abcdef-amd64' "$MOCK_LOG"
 }

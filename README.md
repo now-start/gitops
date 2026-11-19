@@ -553,6 +553,13 @@ Docker Compose의 모든 이미지에는 자체 레지스트리 여부와 관계
 `Validate Workflows`와 해당 변경에 필요한 검사를 통과하면 자동 병합됩니다.
 메이저 업데이트와 다이제스트만 바뀌는 업데이트는 수동 검토·병합용 PR을 만듭니다.
 
+워크플로우 `env`에서 이름이 `_IMAGE`로 끝나고 `태그@sha256:digest`로 고정한 이미지는
+`custom.regex` 관리자가 추적합니다. 현재 대상은 Java 이미지 builder(`PAKETO_BUILDER_IMAGE`)입니다.
+다른 업데이트와 같이 마이너·패치 업데이트는 `Validate Workflows`를 통과하면 자동 병합되며,
+이 검사에는 builder index의 AMD64/ARM64 manifest 확인이 포함됩니다.
+builder 병합은 배포를 바꾸지 않고 이후 앱 릴리스 빌드에만 적용됩니다.
+실제 이미지 빌드는 그 릴리스의 이미지 빌드 단계에서 확인하므로, 실패하면 이미지를 발행하지 않고 멈춥니다.
+
 `platformAutomerge`가 꺼져 있으므로 검사 통과 후 Renovate가 직접 병합합니다.
 따라서 자동 병합은 PR을 만든 검사 회차가 아닌 다음 검사 회차에서 이루어지며,
 60초 대기 간격으로 인해 대략 1분이 추가됩니다.
@@ -759,7 +766,7 @@ CI 이미지 발행 → Renovate DEV PR → 병합 → Portainer DEV 배포·검
 
 배지와 측정 SHA는 `jacoco-badge-<module 또는 root>` 산출물에 보관한다. 성공한 최신 main 빌드만 별도의 쓰기 권한 job에서 `coverage` 브랜치를 갱신한다. 루트는 `jacoco.svg`, `jacoco-branches.svg`, `summary.json`, 모듈은 `<module>/` 아래에 저장하며 다른 모듈의 배지는 보존한다. PR은 산출물만 생성한다. 기존 버전 정책으로 build가 생략되면 커버리지도 갱신되지 않는다.
 
-Java 이미지 builder는 AMD64/ARM64가 모두 검증된 `builder-noble-java-tiny:0.0.200`의 index digest로 고정한다. 2026-10-24 확인한 `latest`는 ARM64 단일 manifest여서 AMD64 빌드가 실패했다. builder 갱신 시 두 플랫폼과 실제 이미지 빌드를 함께 확인한다.
+Java 이미지 builder는 `reusable-java-docker.yaml`의 workflow `env`인 `PAKETO_BUILDER_IMAGE` 한 곳에 버전 태그와 index digest로 고정한다. 런타임 JRE의 메이저 버전은 앱의 Gradle toolchain이 정하고, 패치 빌드는 builder에 포함된 BellSoft Liberica 빌드팩이 정한다. 따라서 JDK 보안 패치는 builder를 갱신한 뒤 각 앱을 새 버전으로 다시 빌드해야 이미지에 반영된다. 2026-10-24 확인한 `latest`는 ARM64 단일 manifest여서 AMD64 빌드가 실패했으므로 `latest`는 사용하지 않는다. builder가 바뀌면 `Validate Workflows`가 AMD64/ARM64 manifest 포함 여부를 확인하고, 실제 이미지 빌드는 이후 첫 앱 릴리스에서 확인한다.
 
 ### 공통 overlay 전환
 

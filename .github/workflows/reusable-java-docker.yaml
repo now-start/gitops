@@ -38,6 +38,10 @@ permissions:
   contents: read
   packages: write
 
+env:
+  # Single source for the runtime JRE patch level; Renovate tracks *_IMAGE tag@digest values.
+  PAKETO_BUILDER_IMAGE: docker.io/paketobuildpacks/builder-noble-java-tiny:0.0.218@sha256:cd34e9cb5f55980b902d9b1c4a354a720b407a512b80caef9e70791b4ab6dbf6
+
 jobs:
   docker:
     strategy:
@@ -145,7 +149,7 @@ jobs:
           ./gradlew "$GRADLE_TASK" \
             --init-script "$INIT_SCRIPT" \
             --imageName="$ARCH_IMAGE" \
-            --builder="docker.io/paketobuildpacks/builder-noble-java-tiny:0.0.200@sha256:7c62dd7e66b277ec9fa2b60d0ad74c4e9ef15db7910dcdf51126e62a02a31463" \
+            --builder="$PAKETO_BUILDER_IMAGE" \
             --imagePlatform="linux/$ARCH" \
             --build-cache \
             -Dorg.gradle.jvmargs="-Xmx2g"

@@ -38,3 +38,15 @@ jobs:
 
       - name: Validate workflows and release contracts
         run: bash tests/run_tests.sh
+
+      # Renovate builder PRs must not reintroduce a single-architecture index.
+      - name: Verify Java builder platforms
+        run: |
+          set -euo pipefail
+          IMAGE=$(ruby -ryaml -e 'puts YAML.load_file(ARGV[0]).fetch("env").fetch("PAKETO_BUILDER_IMAGE")' .github/workflows/reusable-java-docker.yaml)
+          PLATFORMS=$(docker buildx imagetools inspect --raw "$IMAGE" | jq -c '[.manifests[]?.platform | "\(.os)/\(.architecture)"] | unique')
+          echo "$IMAGE -> $PLATFORMS"
+          if ! jq -e '(["linux/amd64", "linux/arm64"] - .) == []' <<< "$PLATFORMS" > /dev/null; then
+            echo "::error::$IMAGE must publish linux/amd64 and linux/arm64"
+            exit 1
+          fi

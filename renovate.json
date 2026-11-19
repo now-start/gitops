@@ -1,7 +1,18 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
-  "enabledManagers": ["docker-compose", "github-actions"],
+  "enabledManagers": ["docker-compose", "github-actions", "custom.regex"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track digest-pinned *_IMAGE env values in workflows",
+      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.ya?ml$/"],
+      "matchStrings": [
+        "_IMAGE:\\s*[\"']?(?<depName>[^\\s:@\"']+):(?<currentValue>[^\\s@\"']+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker"
+    }
+  ],
   "ignorePaths": ["_template/**"],
   "pinDigests": false,
   "timezone": "Asia/Seoul",
@@ -11,7 +22,7 @@
   "platformAutomerge": false,
   "packageRules": [
     {
-      "matchManagers": ["docker-compose", "github-actions"],
+      "matchManagers": ["docker-compose", "github-actions", "custom.regex"],
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
     },
