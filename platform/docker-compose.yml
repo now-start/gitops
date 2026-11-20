@@ -89,7 +89,7 @@ services:
 
   gateway:
     <<: *service-defaults
-    image: ghcr.io/now-start/gateway:6.2.9
+    image: ghcr.io/now-start/gateway:6.2.10
     # 내부 서비스와는 platform_default로, 공개는 edge_public으로 받는다.
     # HOSTNAME이 IPv4 두 개로 풀리므로 6.2.9부터 Config Server 기준으로 Hazelcast 주소를 고르고
     # 그 주소에만 바인딩한다(platform 저장소 docs/network-address-selection.md).
