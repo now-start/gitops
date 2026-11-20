@@ -20,10 +20,14 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Verify pinned builder digest and Linux platforms
+      - name: Verify pinned builder and buildpack digests and Linux platforms
         run: |
-          builder=$(ruby -ryaml -e 'puts YAML.load_file(ARGV[0]).fetch("jobs").fetch("docker").fetch("env").fetch("BUILDER_IMAGE")' .github/workflows/reusable-java-docker.yaml)
-          docker buildx imagetools inspect "${builder%@*}" --format '{{json .Manifest}}' |
-            jq -e --arg digest "${builder##*@}" '
-              .digest == $digest and
-              ([.manifests[] | select(.platform.os == "linux") | .platform.architecture] | contains(["amd64", "arm64"]))'
+          set -euo pipefail
+          for key in BUILDER_IMAGE HEALTH_CHECKER_IMAGE; do
+            image=$(ruby -ryaml -e 'puts YAML.load_file(ARGV[0]).fetch("jobs").fetch("docker").fetch("env").fetch(ARGV[1])' .github/workflows/reusable-java-docker.yaml "$key")
+            echo "$key=$image"
+            docker buildx imagetools inspect "${image%@*}" --format '{{json .Manifest}}' |
+              jq -e --arg digest "${image##*@}" '
+                .digest == $digest and
+                ([.manifests[] | select(.platform.os == "linux") | .platform.architecture] | contains(["amd64", "arm64"]))'
+          done
