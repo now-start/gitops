@@ -7,7 +7,7 @@
       "customType": "regex",
       "managerFilePatterns": [".github/workflows/reusable-java-docker.yaml"],
       "matchStrings": [
-        "BUILDER_IMAGE: docker\\.io/(?<depName>[^\\s:@]+):(?<currentValue>[^\\s@]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+        "[A-Z_]+_IMAGE: docker\\.io/(?<depName>[^\\s:@]+):(?<currentValue>[^\\s@]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"

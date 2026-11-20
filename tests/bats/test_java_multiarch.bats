@@ -21,9 +21,14 @@ run_step() {
 }
 
 publish() { run_step publish 'Publish and verify multi-platform image'; }
+job_env() {
+  ruby -ryaml -e 'puts YAML.load_file(ARGV[0]).fetch("jobs").fetch("docker").fetch("env").fetch(ARGV[1])' "$WORKFLOW" "$1"
+}
+
 build() {
-  BUILDER_IMAGE=$(ruby -ryaml -e 'puts YAML.load_file(ARGV[0]).fetch("jobs").fetch("docker").fetch("env").fetch("BUILDER_IMAGE")' "$WORKFLOW")
-  export BUILDER_IMAGE
+  BUILDER_IMAGE=$(job_env BUILDER_IMAGE)
+  HEALTH_CHECKER_IMAGE=$(job_env HEALTH_CHECKER_IMAGE)
+  export BUILDER_IMAGE HEALTH_CHECKER_IMAGE
   run_step docker 'Build and push architecture image'
 }
 
@@ -174,4 +179,29 @@ exit 42
   [[ "$BUILDER_IMAGE" =~ ^docker\.io/paketobuildpacks/builder-noble-java-tiny:[0-9]+\.[0-9]+\.[0-9]+@sha256:[a-f0-9]{64}$ ]]
   grep -F -- "--builder=$BUILDER_IMAGE " gradle-call
   grep -F 'push ghcr.io/example/app:build-0123456789abcdef-amd64' "$MOCK_LOG"
+}
+
+@test "health-checker buildpack is pinned by version tag and index digest" {
+  run job_env HEALTH_CHECKER_IMAGE
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ ^docker\.io/paketobuildpacks/health-checker:[0-9]+\.[0-9]+\.[0-9]+@sha256:[a-f0-9]{64}$ ]]
+}
+
+@test "Java build defaults buildpacks to builder java plus health-checker without overriding apps" {
+  build
+  [ "$status" -eq 0 ]
+  INIT_SCRIPT="$RUNNER_TEMP/boot-image.init.gradle"
+  grep -Fq "'BP_HEALTH_CHECKER_ENABLED': 'true'" "$INIT_SCRIPT"
+  grep -Fq 'buildpacks.convention([' "$INIT_SCRIPT"
+  grep -Fq "'urn:cnb:builder:paketo-buildpacks/java'" "$INIT_SCRIPT"
+  grep -Fq "System.getenv('HEALTH_CHECKER_IMAGE')" "$INIT_SCRIPT"
+  ! grep -Eq 'buildpacks(\.set\(| *=)' "$INIT_SCRIPT"
+  ! grep -q -- '--buildpack' gradle-call
+}
+
+@test "image without health-checker is rejected before architecture push" {
+  export MISSING_HEALTH_CHECKER=true
+  build
+  [ "$status" -ne 0 ]
+  ! grep -q '^push ' "$MOCK_LOG"
 }

@@ -49,6 +49,8 @@ jobs:
     env:
       MODULE: ${{ inputs.module }}
       BUILDER_IMAGE: docker.io/paketobuildpacks/builder-noble-java-tiny:0.0.218@sha256:cd34e9cb5f55980b902d9b1c4a354a720b407a512b80caef9e70791b4ab6dbf6
+      # Compose healthchecks run /workspace/health-check, which this buildpack provides.
+      HEALTH_CHECKER_IMAGE: docker.io/paketobuildpacks/health-checker:2.14.4@sha256:f058393791cc1af407b4e6fc2295cde3d34647a74a9cb019309c7ebf3d0df585
     strategy:
       fail-fast: false
       matrix:
@@ -125,7 +127,13 @@ jobs:
                   tasks.named('bootBuildImage') {
                       environment.putAll([
                           'BP_OCI_SOURCE': System.getenv('SOURCE_URL'),
-                          'BP_OCI_REVISION': System.getenv('SOURCE_SHA')
+                          'BP_OCI_REVISION': System.getenv('SOURCE_SHA'),
+                          'BP_HEALTH_CHECKER_ENABLED': 'true'
+                      ])
+                      // Convention only: apps that declare buildpacks (e.g. extra ones) keep their list.
+                      buildpacks.convention([
+                          'urn:cnb:builder:paketo-buildpacks/java',
+                          System.getenv('HEALTH_CHECKER_IMAGE')
                       ])
                   }
               }
@@ -141,10 +149,13 @@ jobs:
             --build-cache \
             -Dorg.gradle.jvmargs="-Xmx2g"
 
+          # Reject images whose Compose healthcheck binary would be missing.
           docker image inspect "$ARCH_IMAGE" |
             jq -e --arg arch "$ARCH" --arg sha "$SOURCE_SHA" '
               .[0].Os == "linux" and .[0].Architecture == $arch and
-              .[0].Config.Labels["org.opencontainers.image.revision"] == $sha'
+              .[0].Config.Labels["org.opencontainers.image.revision"] == $sha and
+              (.[0].Config.Labels["io.buildpacks.lifecycle.metadata"] | fromjson |
+                any(.buildpacks[]; .key == "paketo-buildpacks/health-checker"))'
           docker run --rm --entrypoint /cnb/lifecycle/launcher "$ARCH_IMAGE" -- java -version
           docker push "$ARCH_IMAGE"
 

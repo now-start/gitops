@@ -97,6 +97,11 @@ Java 이미지는 `ubuntu-24.04`(AMD64), `ubuntu-24.04-arm`(ARM64) 러너에서
 `BUILDER_IMAGE`에 고정한 Paketo 빌더를 사용합니다. Gradle에서 지정하는 run image도
 두 아키텍처를 지원해야 합니다.
 
+`bootBuildImage`의 기본 빌드팩은 빌더의 Java 빌드팩과 `HEALTH_CHECKER_IMAGE`에 고정한
+health-checker이며 `BP_HEALTH_CHECKER_ENABLED=true`도 공통 워크플로가 넣습니다.
+앱 Gradle에서는 `buildpacks`를 지정하지 않습니다. 직접 지정하면 그 목록이 기본값을
+대신하므로 health-checker를 포함해야 하고, 빠진 이미지는 push 전에 실패합니다.
+
 - 중간 이미지: `build-{source-sha}-amd64`, `build-{source-sha}-arm64`
 - 배포 이미지: `{version}` (두 아키텍처를 포함한 manifest index)
 - 두 빌드 성공 후 각 이미지의 실제 플랫폼과 OCI revision을 검증하고 digest로 묶습니다.

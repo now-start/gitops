@@ -31,7 +31,12 @@ case "$*" in
     ;;
   'buildx imagetools create '*) touch "$MOCK_CREATED" ;;
   'image inspect '*)
-    jq -n --arg arch "${LOCAL_ARCH:-$ARCH}" --arg sha "${LOCAL_SHA:-$SOURCE_SHA}" '[{Os:"linux",Architecture:$arch,Config:{Labels:{"org.opencontainers.image.revision":$sha}}}]'
+    buildpacks='["paketo-buildpacks/bellsoft-liberica","paketo-buildpacks/health-checker"]'
+    [ "${MISSING_HEALTH_CHECKER:-false}" = true ] && buildpacks='["paketo-buildpacks/bellsoft-liberica"]'
+    jq -n --arg arch "${LOCAL_ARCH:-$ARCH}" --arg sha "${LOCAL_SHA:-$SOURCE_SHA}" --argjson bps "$buildpacks" '
+      [{Os:"linux",Architecture:$arch,Config:{Labels:{
+        "org.opencontainers.image.revision":$sha,
+        "io.buildpacks.lifecycle.metadata":({buildpacks:[$bps[] | {key:.}]} | tojson)}}}]'
     ;;
   'run --rm --entrypoint /cnb/lifecycle/launcher '*)
     if [[ "$*" != *' -- java -version' ]]; then
