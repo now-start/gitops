@@ -48,7 +48,7 @@ jobs:
   docker:
     env:
       MODULE: ${{ inputs.module }}
-      BUILDER_IMAGE: docker.io/paketobuildpacks/builder-noble-java-tiny:0.0.218@sha256:cd34e9cb5f55980b902d9b1c4a354a720b407a512b80caef9e70791b4ab6dbf6
+      BUILDER_IMAGE: docker.io/paketobuildpacks/builder-noble-java-tiny:0.0.219@sha256:a7d13de8ea285b9e4f5ebf41b48ad523b3a7eb0d63a8b0733bba508b7dcc8c38
       # Compose healthchecks run /workspace/health-check, which this buildpack provides.
       HEALTH_CHECKER_IMAGE: docker.io/paketobuildpacks/health-checker:2.14.4@sha256:f058393791cc1af407b4e6fc2295cde3d34647a74a9cb019309c7ebf3d0df585
     strategy:
