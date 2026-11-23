@@ -9,7 +9,7 @@ NFS 서버 기본값은 `100.100.1.1`, 공유 경로 예제는 `/volume1/docker/
 1. 이 디렉터리를 새 스택 디렉터리로 복사합니다.
 2. `app`을 서비스 이름으로, `REPLACE_IMAGE:0.0.0`을 고정 버전 이미지로 바꿉니다.
 3. NFS 기본값 `100.100.1.1:/volume1/docker/app`에서 `app`을 해당 서비스의 공유 디렉터리로 바꿉니다. 저장소가 필요 없으면 서비스의 `volumes`와 최상위 `volumes`를 함께 제거합니다.
-4. 필요한 포트·환경변수·상태 검사 항목만 주석을 해제합니다. 시간대가 필요하면 `TZ: Asia/Seoul` 예제를 사용합니다. Spring/Paketo 이미지에서는 `THC_PORT: "8081"`, `THC_PATH: /actuator/health/readiness`와 `/workspace/health-check` 예제를 함께 활성화합니다.
+4. 필요한 포트·환경변수·상태 검사 항목만 주석을 해제합니다. 애플리케이션은 `TZ: UTC` 예제를 그대로 사용합니다(아래 "시간대" 참고). Spring/Paketo 이미지에서는 `THC_PORT: "8081"`, `THC_PATH: /actuator/health/readiness`와 `/workspace/health-check` 예제를 함께 활성화합니다.
 5. `replicas`를 지정하거나, 노드마다 실행하려면 `mode: global`로 바꾸고 `replicas`를 제거합니다.
 6. 외부에 공개할 HTTP 서비스는 공개 포트 대신 Traefik으로 공개합니다. 서비스의 `networks`, `deploy.labels`와
    최상위 `edge` 네트워크 주석을 해제하고, 포트 라벨의 `app`을 스택 이름으로, `8080`을 컨테이너 포트로 바꿉니다.
@@ -18,6 +18,19 @@ NFS 서버 기본값은 `100.100.1.1`, 공유 경로 예제는 `/volume1/docker/
 
 서비스를 추가할 때도 `service-defaults`와 `deploy-defaults`를 상속합니다.
 YAML 병합은 얕은 병합이므로 `deploy`를 다시 선언할 때 `<<: *deploy-defaults`를 포함해야 합니다.
+
+## 시간대
+
+애플리케이션 컨테이너는 이미지 기본값에 맡기지 않고 `TZ: UTC`를 명시합니다.
+
+- 저장·전송·내부 계산은 UTC로 합니다. Java는 `Instant`와 PostgreSQL `timestamptz`, Python은 `datetime.now(UTC)`를 씁니다.
+- 한국 기준 날짜·스케줄·집계·화면 출력이 필요한 곳에서만 코드에 `Asia/Seoul`을 명시합니다.
+  예: `LocalDate.now(clock.withZone(ZoneId.of("Asia/Seoul")))`, `@Scheduled(cron = "...", zone = "Asia/Seoul")`, `created_at AT TIME ZONE 'Asia/Seoul'`.
+- `LocalDate.now()`, zone 없는 `@Scheduled` cron, 인자 없는 `datetime.now()`처럼 기본 시간대에 기대는 코드는 쓰지 않습니다.
+
+컨테이너 `TZ`는 콘솔 로그 표시에만 영향을 줍니다. OTLP로 수집한 Loki 로그 시각은 바뀌지 않고,
+Grafana는 보는 사람의 시간대 설정(기본값 브라우저)으로 표시합니다.
+PostgreSQL·Grafana·edge 같은 인프라 스택의 `TZ`는 자체 로그와 UI 표시용이라 이 규칙과 무관합니다.
 
 ## 공통 기본값
 
@@ -37,7 +50,7 @@ YAML 병합은 얕은 병합이므로 `deploy`를 다시 선언할 때 `<<: *dep
 MTU 1200은 패킷 크기 설정이며 대역폭 제한이 아닙니다. 배포 네트워크에 맞게 조정할 수 있습니다.
 NFS 공유 경로는 태스크가 배치될 모든 노드에서 접근 가능해야 하며, 컨테이너 사용자에게 필요한 읽기·쓰기 권한을 서버에서 설정합니다.
 `hard` 마운트는 NFS 응답이 없으면 I/O를 재시도하며 기다립니다. 여러 복제본이 같은 경로를 쓰므로 애플리케이션의 동시 접근 지원 여부를 확인합니다.
-사용자 권한, 시간대, NFS 서버 주소, 외부 네트워크 이름은 서비스와 환경에 맞게 지정합니다.
+사용자 권한, NFS 서버 주소, 외부 네트워크 이름은 서비스와 환경에 맞게 지정합니다.
 
 `restart_policy.condition: any`는 성공 종료도 재시작합니다. 초기화·마이그레이션처럼 완료 후
 끝나야 하는 작업에는 이 장기 실행 서비스 템플릿을 그대로 사용하지 않습니다.

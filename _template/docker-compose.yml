@@ -37,7 +37,7 @@ services:
     #     protocol: tcp
     #     mode: ingress
     # environment:
-    #   TZ: Asia/Seoul
+    #   TZ: UTC
     #   # Spring/Paketo 상태 검사 환경변수
     #   THC_PORT: "8081"
     #   THC_PATH: /actuator/health/readiness
