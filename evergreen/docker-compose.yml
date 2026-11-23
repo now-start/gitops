@@ -55,6 +55,8 @@ services:
     image: ghcr.io/now-start/evergreen:3.0.0
     environment:
       <<: *environment-defaults
+      # coin은 UTC로 전환했다. lotto는 전환 전까지 공통값(Asia/Seoul)을 유지한다.
+      TZ: UTC
       # Empty uses socket.gethostname() and overrides Spring-only placeholders.
       EUREKA_INSTANCE_HOSTNAME: ""
     deploy:
