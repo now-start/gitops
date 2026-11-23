@@ -59,7 +59,7 @@ services:
   # X-Forwarded-*는 Swarm overlay 기본 대역(10.0.0.0/8)에서 온 요청만 신뢰한다.
   traefik:
     <<: *service-defaults
-    image: traefik:v3.7.19
+    image: traefik:3.8.0
     command:
       - --global.checkNewVersion=false
       - --global.sendAnonymousUsage=false
