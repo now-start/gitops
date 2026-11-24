@@ -48,9 +48,8 @@ jobs:
   docker:
     env:
       MODULE: ${{ inputs.module }}
-      BUILDER_IMAGE: docker.io/paketobuildpacks/builder-noble-java-tiny:0.0.221@sha256:215b5e04992bfe0e50b447dcf51f555343a0ac33bb71dcf3815130a5da0ee1eb
       # Compose healthchecks run /workspace/health-check, which this buildpack provides.
-      HEALTH_CHECKER_IMAGE: docker.io/paketobuildpacks/health-checker:2.14.4@sha256:f058393791cc1af407b4e6fc2295cde3d34647a74a9cb019309c7ebf3d0df585
+      HEALTH_CHECKER_IMAGE: docker.io/paketobuildpacks/health-checker:latest
     strategy:
       fail-fast: false
       matrix:
@@ -141,10 +140,12 @@ jobs:
           GRADLE
 
           chmod +x gradlew
+          # No --builder: Spring Boot adds its tiny run image only when the builder is left unset.
+          # Naming a builder, even the default one, uses that builder's own run image
+          # (a base image with a shell for ubuntu-resolute-builder).
           ./gradlew "$GRADLE_TASK" \
             --init-script "$INIT_SCRIPT" \
             --imageName="$ARCH_IMAGE" \
-            --builder="$BUILDER_IMAGE" \
             --imagePlatform="linux/$ARCH" \
             --build-cache \
             -Dorg.gradle.jvmargs="-Xmx2g"

@@ -110,7 +110,7 @@ Python으로 작성된 `evergreen`의 coin은 Spring 빌드팩 적용 대상이 
 
 검사 포트 8081과 `/actuator/health/readiness` 경로는 각 Spring 서비스의 Compose 환경 변수 `THC_PORT`, `THC_PATH`로 지정합니다.
 GitOps는 `/workspace/health-check`를 직접 실행해 검사 때마다 launcher의 JVM 메모리 계산·인증서 초기화가 반복되지 않도록 합니다.
-health-checker 빌드팩과 `BP_HEALTH_CHECKER_ENABLED=true`는 [Java Docker 워크플로](.github/workflows/reusable-java-docker.yaml)가 `HEALTH_CHECKER_IMAGE`에 고정한 버전으로 기본 제공하므로 앱 Gradle에는 두지 않습니다.
+health-checker 빌드팩(`:latest`)과 `BP_HEALTH_CHECKER_ENABLED=true`는 [Java Docker 워크플로](.github/workflows/reusable-java-docker.yaml)가 `HEALTH_CHECKER_IMAGE`로 기본 제공하므로 앱 Gradle에는 두지 않습니다.
 앱이 `buildpacks`를 직접 지정하면 그 목록이 기본값을 대신하므로 health-checker도 직접 포함해야 하며, health-checker가 없는 이미지는 push 전에 거부됩니다.
 `BPE_DEFAULT_THC_PORT`·`BPE_DEFAULT_THC_PATH` 기본값은 사용하지 않습니다.
 검사 대상 변경은 배포 환경의 `THC_PORT`, `THC_PATH`에서 관리합니다.
@@ -767,8 +767,9 @@ CI 이미지 발행 → Renovate DEV PR → 병합 → Portainer DEV 배포·검
 
 배지와 측정 SHA는 `jacoco-badge-<module 또는 root>` 산출물에 보관한다. 성공한 최신 main 빌드만 별도의 쓰기 권한 job에서 `coverage` 브랜치를 갱신한다. 루트는 `jacoco.svg`, `jacoco-branches.svg`, `summary.json`, 모듈은 `<module>/` 아래에 저장하며 다른 모듈의 배지는 보존한다. PR은 산출물만 생성한다. 기존 버전 정책으로 build가 생략되면 커버리지도 갱신되지 않는다.
 
-Java 이미지 빌더는 [Java Docker 워크플로](.github/workflows/reusable-java-docker.yaml)의 `BUILDER_IMAGE`에서 태그와 멀티아키텍처 인덱스 다이제스트로 고정합니다. 2026-10-24에는 `latest`가 ARM64 단일 manifest를 가리켜 AMD64 빌드가 실패했습니다.
-health-checker 빌드팩도 같은 방식으로 `HEALTH_CHECKER_IMAGE`에 고정합니다. 앱마다 `latest`로 받으면 빌드 시점에 따라 버전이 달라지기 때문입니다.
+Java 이미지 빌더는 고정하지 않습니다. [Java Docker 워크플로](.github/workflows/reusable-java-docker.yaml)가 `--builder`를 넘기지 않으므로 앱의 Spring Boot 버전이 정한 기본 빌더의 `latest`를 받고, health-checker 빌드팩도 `HEALTH_CHECKER_IMAGE`에서 `latest`를 받습니다.
+2026-10-24에는 빌더 `latest`가 ARM64 단일 manifest를 가리켜 AMD64 빌드가 실패했습니다. 이런 경우 해당 아키텍처 빌드가 push 전에 실패해 이미지가 발행되지 않으므로, upstream manifest가 복구된 뒤 다시 실행합니다.
+두 아키텍처 러너는 빌더를 따로 받으므로, 그 사이 `latest`가 바뀌면 한 버전 안에서 아키텍처별 빌더 버전이 다를 수 있습니다.
 
 ### 공통 overlay 전환
 

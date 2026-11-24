@@ -93,12 +93,16 @@ Docker image:  ghcr.io/now-start/{repository}:5.9.8
 ## Java 멀티 아키텍처 이미지
 
 Java 이미지는 `ubuntu-24.04`(AMD64), `ubuntu-24.04-arm`(ARM64) 러너에서
-각각 `bootBuildImage --imagePlatform`으로 빌드합니다. 두 러너는 공통 워크플로의
-`BUILDER_IMAGE`에 고정한 Paketo 빌더를 사용합니다. Gradle에서 지정하는 run image도
-두 아키텍처를 지원해야 합니다.
+각각 `bootBuildImage --imagePlatform`으로 빌드합니다. 공통 워크플로는 `--builder`를
+넘기지 않으므로 두 러너 모두 앱의 Spring Boot 버전이 정한 기본 빌더(`:latest`)와
+tiny run image를 사용합니다(Boot 4.2: `ubuntu-resolute-builder`, `ubuntu-resolute-run-tiny`).
+앱 Gradle에서 builder나 run image를 지정하면 두 아키텍처를 지원해야 하고, builder를 지정하면
+Spring Boot가 tiny run image를 붙이지 않습니다.
 
-`bootBuildImage`의 기본 빌드팩은 빌더의 Java 빌드팩과 `HEALTH_CHECKER_IMAGE`에 고정한
-health-checker이며 `BP_HEALTH_CHECKER_ENABLED=true`도 공통 워크플로가 넣습니다.
+`bootBuildImage`의 기본 빌드팩은 빌더의 Java 빌드팩과 `HEALTH_CHECKER_IMAGE`의
+health-checker(`:latest`)이며 `BP_HEALTH_CHECKER_ENABLED=true`도 공통 워크플로가 넣습니다.
+빌더·빌드팩은 빌드할 때마다 최신 이미지를 받으므로, Java 보안 패치는 앱 이미지를 다시
+발행할 때 반영됩니다.
 앱 Gradle에서는 `buildpacks`를 지정하지 않습니다. 직접 지정하면 그 목록이 기본값을
 대신하므로 health-checker를 포함해야 하고, 빠진 이미지는 push 전에 실패합니다.
 

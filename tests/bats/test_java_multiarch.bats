@@ -26,9 +26,8 @@ job_env() {
 }
 
 build() {
-  BUILDER_IMAGE=$(job_env BUILDER_IMAGE)
   HEALTH_CHECKER_IMAGE=$(job_env HEALTH_CHECKER_IMAGE)
-  export BUILDER_IMAGE HEALTH_CHECKER_IMAGE
+  export HEALTH_CHECKER_IMAGE
   run_step docker 'Build and push architecture image'
 }
 
@@ -171,20 +170,25 @@ exit 42
   [ "$status" -eq 0 ]
 }
 
-@test "AMD64 build passes the versioned Paketo builder and its digest to Gradle" {
+@test "AMD64 build leaves the builder to Spring Boot's default" {
   export ARCH=amd64
   build
   [ "$status" -eq 0 ]
   grep -F -- '--imagePlatform=linux/amd64' gradle-call
-  [[ "$BUILDER_IMAGE" =~ ^docker\.io/paketobuildpacks/builder-noble-java-tiny:[0-9]+\.[0-9]+\.[0-9]+@sha256:[a-f0-9]{64}$ ]]
-  grep -F -- "--builder=$BUILDER_IMAGE " gradle-call
+  ! grep -q -- '--builder' gradle-call
+  ! grep -Eq '(^|[[:space:]])builder(\.set\(| *=)' "$RUNNER_TEMP/boot-image.init.gradle"
   grep -F 'push ghcr.io/example/app:build-0123456789abcdef-amd64' "$MOCK_LOG"
 }
 
-@test "health-checker buildpack is pinned by version tag and index digest" {
+@test "Java Docker job does not pin a builder image" {
+  run job_env BUILDER_IMAGE
+  [ "$status" -ne 0 ]
+}
+
+@test "health-checker buildpack tracks the latest tag" {
   run job_env HEALTH_CHECKER_IMAGE
   [ "$status" -eq 0 ]
-  [[ "$output" =~ ^docker\.io/paketobuildpacks/health-checker:[0-9]+\.[0-9]+\.[0-9]+@sha256:[a-f0-9]{64}$ ]]
+  [ "$output" = 'docker.io/paketobuildpacks/health-checker:latest' ]
 }
 
 @test "Java build defaults buildpacks to builder java plus health-checker without overriding apps" {
