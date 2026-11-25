@@ -167,7 +167,7 @@ services:
   # 요청마다 남는 접근 로그를 줄이려고 warning 이상만 기록한다.
   socket-proxy:
     <<: *service-defaults
-    image: tecnativa/docker-socket-proxy:v0.5.0
+    image: tecnativa/docker-socket-proxy:3.4@sha256:027f9fa5ee70be5836eeaa10ce889d7a83f34a8db16a7f412818b92997e0beab
     environment:
       TZ: Asia/Seoul
       LOG_LEVEL: warning
