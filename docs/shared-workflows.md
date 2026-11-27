@@ -173,6 +173,7 @@ jobs:
     uses: now-start/gitops/.github/workflows/reusable-java-app.yaml@main
     with:
       module: gateway
+      shared-coverage: true
     secrets:
       registry-password: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -196,11 +197,11 @@ Docker image:  ghcr.io/now-start/config:2.1.14
 | `module` | 빈 값 | Gradle 모듈 및 이미지 이름 |
 | `java-version` | 빈 값 | 명시적 JDK 버전, 생략 시 Gradle 파일에서 감지 |
 | `registry-password` | 필수 | 이미지 push에 사용할 token |
-| `shared-coverage` | 저장소별 | 공통 JaCoCo 측정 사용 여부 |
+| `shared-coverage` | `false` | 공통 JaCoCo 측정 사용 여부 |
 
 ### JaCoCo 커버리지
 
-`barosteel`, `lotto-service`, `nyang-nyang-bot`, `platform`에서 자동으로 사용합니다.
+커버리지를 측정할 작업에서 `reusable-java-app.yaml`을 호출할 때 `with.shared-coverage`를 `true`로 지정합니다.
 CI가 같은 GitOps 리비전의 `gradle/coverage.init.gradle`을 읽어 기본 JVM 테스트를 한 번 실행하고 HTML·XML 보고서를 만듭니다.
 루트 빌드는 JVM 모듈을 합산하고, `module`을 지정한 빌드는 해당 모듈을 측정합니다.
 PR에서는 Actions 요약과 산출물을 확인할 수 있습니다. 최신 main의 성공한 측정값은 서비스 저장소의 `coverage` 브랜치에 라인·분기 배지로 게시됩니다.

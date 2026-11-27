@@ -54,7 +54,10 @@ setup() {
 
 @test "tagged Java versions run a separate coverage build only for enabled callers" {
   run ruby -ryaml -e '
-    jobs = YAML.load_file(ARGV[0]).fetch("jobs")
+    workflow = YAML.load_file(ARGV[0])
+    coverage_input = workflow.fetch("on", workflow[true]).fetch("workflow_call").fetch("inputs").fetch("shared-coverage")
+    abort unless coverage_input.fetch("type") == "boolean" && coverage_input.fetch("default") == false
+    jobs = workflow.fetch("jobs")
     coverage = jobs.fetch("coverage-existing-version")
     tagged = jobs.fetch("build").fetch("if").sub("false", "true")
     abort unless coverage.fetch("if") == "inputs.shared-coverage && #{tagged}"
