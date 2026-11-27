@@ -26,7 +26,7 @@ x-service-defaults: &service-defaults
 
 services:
   nyang-nyang-bot:
-    image: ghcr.io/now-start/nyang-nyang-bot:6.0.3
+    image: ghcr.io/now-start/nyang-nyang-bot:6.0.4
     user: root
     <<: *service-defaults
     environment:
