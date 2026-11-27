@@ -39,7 +39,8 @@ jobs:
             if (module && !/^[a-zA-Z0-9_.-]+$/.test(module)) throw new Error('Invalid module');
             const prefix = module ? `${module}/` : '';
             const summary = fs.readFileSync('coverage-result/summary.json', 'utf8');
-            if (JSON.parse(summary).source_sha !== context.sha) {
+            const measurement = JSON.parse(summary);
+            if (measurement.source_sha !== context.sha) {
               throw new Error('보고서의 기준 커밋이 실행 커밋과 다릅니다.');
             }
             for (let attempt = 0; attempt < 5; attempt++) {
@@ -77,5 +78,6 @@ jobs:
                 if (![409, 422].includes(error.status) || attempt === 4) throw error;
               }
             }
-            core.summary.addHeading('JaCoCo 전체 라인 커버리지')
-              .addRaw(`라인 ${JSON.parse(summary).line_percent}% · 분기 ${JSON.parse(summary).branch_percent}% · ${context.sha}`).write();
+            const branches = measurement.branch_percent == null ? 'n/a' : `${measurement.branch_percent}%`;
+            core.summary.addHeading('JaCoCo 커버리지')
+              .addRaw(`라인 ${measurement.line_percent}% · 분기 ${branches} · ${context.sha}`).write();

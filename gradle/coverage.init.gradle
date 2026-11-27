@@ -1,0 +1,80 @@
+import org.gradle.api.tasks.SourceSetContainer
+import org.gradle.api.tasks.testing.Test
+import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
+import org.gradle.testing.jacoco.tasks.JacocoReport
+
+gradle.projectsEvaluated {
+    if (gradle.parent != null) return
+
+    def root = gradle.rootProject
+    def module = root.providers.systemProperty('nowstart.coverage.module').getOrElse('')
+    def scope = module ? root.project(module) : root
+    def projects = scope.allprojects.findAll { it.pluginManager.hasPlugin('java') }
+    if (projects.empty) return
+
+    // Retain the project's coverage policy and report during migration.
+    def existing = scope.tasks.findByName('jacocoRootReport')
+    if (existing instanceof JacocoReport) {
+        scope.tasks.named('check') { dependsOn existing }
+        return
+    }
+
+    scope.pluginManager.apply('base')
+    (projects + [scope]).unique().each { owner ->
+        if (!owner.pluginManager.hasPlugin('jacoco')) {
+            owner.pluginManager.apply('jacoco')
+            owner.jacoco.toolVersion = '0.8.16'
+            owner.tasks.withType(Test).configureEach { test ->
+                test.extensions.getByType(JacocoTaskExtension).enabled = test.name == 'test'
+            }
+        }
+    }
+
+    def tests = projects.collect { it.tasks.named('test', Test) }
+    // Skipped and NO-SOURCE suites may still have a previous run's .exec on disk.
+    def measuredData = scope.providers.provider {
+        tests.collect { it.get() }.findAll { test ->
+            def state = test.state
+            state.executed && !state.noSource &&
+                (!state.skipped || state.upToDate || state.skipMessage == 'FROM-CACHE')
+        }.collect { test -> test.extensions.getByType(JacocoTaskExtension).destinationFile }
+    }
+    def reportDir = scope.layout.buildDirectory.dir('reports/jacoco/root')
+    def xmlFile = reportDir.map { it.file('jacoco.xml') }
+    def htmlDir = reportDir.map { it.dir('html') }
+    def verifyData = scope.tasks.register('nowstartVerifyCoverageData') {
+        dependsOn(tests)
+        doLast {
+            def data = measuredData.get()
+            // JacocoReport skips when no tests ran; do not publish last run's outputs.
+            if (data.empty) scope.delete(xmlFile, htmlDir)
+            data.each { file ->
+                if (!file.isFile() || file.length() == 0) {
+                    throw new GradleException("Missing JaCoCo execution data for a completed test: ${file}")
+                }
+            }
+        }
+    }
+    def report = scope.tasks.register('nowstartCoverageReport', JacocoReport) {
+        group = 'verification'
+        description = 'Aggregates coverage from the default JVM tests for the CI build.'
+        dependsOn(verifyData)
+        executionData.from(measuredData)
+        projects.each { owner ->
+            def main = owner.extensions.getByType(SourceSetContainer).named('main').get()
+            sourceDirectories.from(main.allSource.srcDirs)
+            classDirectories.from(main.output.classesDirs.asFileTree.matching {
+                // Exclude Querydsl Q-types, while retaining classes such as QuoteService.
+                exclude { entry -> entry.name ==~ /Q[A-Z].*\.class/ }
+            })
+        }
+        reports {
+            xml.required = true
+            xml.outputLocation = xmlFile
+            html.required = true
+            html.outputLocation = htmlDir
+            csv.required = false
+        }
+    }
+    scope.tasks.named('check') { dependsOn report }
+}

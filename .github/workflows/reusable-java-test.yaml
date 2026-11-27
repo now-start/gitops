@@ -17,6 +17,10 @@ on:
         required: false
         type: string
         default: ""
+      shared-coverage:
+        description: Apply the GitOps JaCoCo convention to the requested Gradle project
+        type: boolean
+        default: false
 
     outputs:
       coverage-available:
@@ -84,19 +88,36 @@ jobs:
           distribution: ${{ inputs.distribution }}
           cache: "gradle"
 
+      - name: Checkout the coverage convention from this workflow revision
+        if: inputs.shared-coverage
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .ci-gitops
+          sparse-checkout: gradle/coverage.init.gradle
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       - name: Make gradlew executable
         run: chmod +x gradlew
 
       - name: Build and test
         env:
+          SHARED_COVERAGE: ${{ inputs.shared-coverage }}
           MODULE: ${{ inputs.module }}
         run: |
+          coverage_args=()
+          if [[ "$SHARED_COVERAGE" == 'true' ]]; then
+            coverage_args=(--init-script "$GITHUB_WORKSPACE/.ci-gitops/gradle/coverage.init.gradle" "-Dnowstart.coverage.module=$MODULE")
+          fi
           GRADLE_TASK="${MODULE:+:$MODULE:}build"
-          ./gradlew "$GRADLE_TASK" --build-cache --parallel -Dorg.gradle.jvmargs="-Xmx2g"
+          ./gradlew "${coverage_args[@]}" "$GRADLE_TASK" --build-cache --parallel -Dorg.gradle.jvmargs="-Xmx2g"
 
       - name: Collect JaCoCo coverage
         id: coverage
         env:
+          SHARED_COVERAGE: ${{ inputs.shared-coverage }}
           MODULE: ${{ inputs.module }}
         run: |
           python3 <<'PYTHON'
@@ -154,6 +175,8 @@ jobs:
               base = Path(os.environ.get("MODULE") or ".")
               reports = sorted((base / "build/reports/jacoco").glob("**/*.xml"))
               aggregate = base / "build/reports/jacoco/root/jacoco.xml"
+              if os.environ.get("SHARED_COVERAGE") == "true" and aggregate not in reports:
+                  raise ValueError(f"Expected shared JaCoCo report at {aggregate}")
               if aggregate in reports:
                   report = aggregate
               elif len(reports) == 1:
@@ -166,8 +189,9 @@ jobs:
               with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
                   stream.write("available=true\n")
               data = json.loads((output / "summary.json").read_text(encoding="utf-8"))
+              branches = "n/a" if data["branch_percent"] is None else f"{data['branch_percent']}%"
               with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
-                  stream.write(f"### JaCoCo\n- Report: `{report}`\n- Lines: {data['line_percent']}%\n- Branches: {data['branch_percent']}\n")
+                  stream.write(f"### JaCoCo\n- Report: `{report}`\n- Lines: {data['line_percent']}%\n- Branches: {branches}\n")
 
           if __name__ == "__main__":
               main()

@@ -761,11 +761,9 @@ CI 이미지 발행 → Renovate DEV PR → 병합 → Portainer DEV 배포·검
 
 ### Java 커버리지
 
-공통 Java 테스트는 `build`를 실행한다. 각 앱에서 JaCoCo 보고서 태스크를 Gradle `check`에 연결하고 XML/HTML 출력을 활성화하면 로컬과 CI가 같은 검증 흐름을 사용한다. 공통 워크플로우는 별도로 테스트나 JaCoCo 태스크를 실행하지 않는다.
+`barosteel`, `lotto-service`, `nyang-nyang-bot`, `platform`은 공통 Gradle 설정으로 기본 JVM 테스트를 측정한다. PR에서 라인·분기 커버리지와 HTML·XML 산출물을 확인할 수 있다. 최신 `main`의 성공한 측정은 버전 태그가 이미 있어도 서비스 저장소의 `coverage` 브랜치에 게시한다.
 
-생성된 `**/build/reports/jacoco/`는 `jacoco-coverage-<module 또는 root>` 산출물로 30일 보관한다. 해당 프로젝트의 `build/reports/jacoco/root/jacoco.xml`을 우선 사용하고, 없으면 프로젝트 보고서 디렉터리의 유일한 XML을 사용한다. 여러 XML을 임의로 합산하지 않으며, 보고서가 없거나 선택이 모호하면 배지는 건너뛴다. 단일 모듈 호출은 지정한 모듈 범위만 사용한다.
-
-배지와 측정 SHA는 `jacoco-badge-<module 또는 root>` 산출물에 보관한다. 성공한 최신 main 빌드만 별도의 쓰기 권한 job에서 `coverage` 브랜치를 갱신한다. 루트는 `jacoco.svg`, `jacoco-branches.svg`, `summary.json`, 모듈은 `<module>/` 아래에 저장하며 다른 모듈의 배지는 보존한다. PR은 산출물만 생성한다. 기존 버전 정책으로 build가 생략되면 커버리지도 갱신되지 않는다.
+`jacoco-coverage-<모듈 또는 root>`와 `jacoco-badge-<모듈 또는 root>` 산출물은 30일 보관한다. 배지 파일은 `jacoco.svg`, `jacoco-branches.svg`이며 `platform`은 각 모듈 디렉터리에 저장한다. [로컬 측정 방법과 공통 설정](docs/shared-workflows.md#jacoco-커버리지)
 
 Java 이미지 빌더는 고정하지 않습니다. [Java Docker 워크플로](.github/workflows/reusable-java-docker.yaml)가 `--builder`를 넘기지 않으므로 앱의 Spring Boot 버전이 정한 기본 빌더의 `latest`를 받고, health-checker 빌드팩도 `HEALTH_CHECKER_IMAGE`에서 `latest`를 받습니다.
 2026-10-24에는 빌더 `latest`가 ARM64 단일 manifest를 가리켜 AMD64 빌드가 실패했습니다. 이런 경우 해당 아키텍처 빌드가 push 전에 실패해 이미지가 발행되지 않으므로, upstream manifest가 복구된 뒤 다시 실행합니다.

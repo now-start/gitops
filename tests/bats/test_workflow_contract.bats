@@ -51,3 +51,17 @@ setup() {
   ' "$WORKFLOWS_DIR/reusable-java-app.yaml"
   [ "$status" -eq 0 ]
 }
+
+@test "tagged Java versions run a separate coverage build only for enabled callers" {
+  run ruby -ryaml -e '
+    jobs = YAML.load_file(ARGV[0]).fetch("jobs")
+    coverage = jobs.fetch("coverage-existing-version")
+    tagged = jobs.fetch("build").fetch("if").sub("false", "true")
+    abort unless coverage.fetch("if") == "inputs.shared-coverage && #{tagged}"
+    abort unless coverage.fetch("needs") == "prepare"
+    abort unless coverage.fetch("uses") == jobs.fetch("build").fetch("uses")
+    abort unless coverage.fetch("with").fetch("shared-coverage") == true
+    abort unless jobs.fetch("coverage-badge").fetch("needs") == %w[build coverage-existing-version]
+  ' "$WORKFLOWS_DIR/reusable-java-app.yaml"
+  [ "$status" -eq 0 ]
+}
