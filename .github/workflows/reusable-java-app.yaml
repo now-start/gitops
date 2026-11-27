@@ -21,7 +21,7 @@ on:
       shared-coverage:
         description: Collect JaCoCo for this repository, including main pushes of an existing version
         type: boolean
-        default: ${{ contains(fromJSON('["now-start/barosteel","now-start/lotto-service","now-start/nyang-nyang-bot","now-start/platform"]'), github.repository) }}
+        default: false
     secrets:
       registry-password:
         description: "Registry password/token"
