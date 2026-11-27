@@ -93,8 +93,9 @@ policy_script() {
   run ruby -ryaml -e '
     java = YAML.load_file("#{ARGV[0]}/reusable-java-app.yaml").fetch("jobs")
     python = YAML.load_file("#{ARGV[0]}/reusable-python-app.yaml").fetch("jobs")
-    abort unless java.keys - ["coverage-badge"] == python.keys
-    java.reject { |name, _| name == "coverage-badge" }.each do |name, job|
+    release_jobs = java.reject { |name, _| %w[coverage-existing-version coverage-badge].include?(name) }
+    abort unless release_jobs.keys == python.keys
+    release_jobs.each do |name, job|
       %w[if needs permissions].each { |field| abort unless job[field] == python[name][field] }
     end
   ' "$WORKFLOWS_DIR"

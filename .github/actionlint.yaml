@@ -4,3 +4,10 @@
 self-hosted-runner:
   labels:
     - ubuntu-26.04
+
+# GitHub.com provides the called workflow identity. actionlint v1.7.12 predates these fields.
+# https://github.blog/changelog/2026-09-03-github-actions-early-september-2026-updates/
+paths:
+  .github/workflows/reusable-java-test.yaml:
+    ignore:
+      - 'property "workflow_(repository|sha)" is not defined in object type'

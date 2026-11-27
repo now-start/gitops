@@ -18,6 +18,10 @@ on:
         required: false
         type: string
         default: ""
+      shared-coverage:
+        description: Collect JaCoCo for this repository, including main pushes of an existing version
+        type: boolean
+        default: ${{ contains(fromJSON('["now-start/barosteel","now-start/lotto-service","now-start/nyang-nyang-bot","now-start/platform"]'), github.repository) }}
     secrets:
       registry-password:
         description: "Registry password/token"
@@ -37,6 +41,7 @@ jobs:
     with:
       module: ${{ inputs.module }}
       java-version: ${{ inputs.java-version }}
+      shared-coverage: ${{ inputs.shared-coverage }}
 
   prepare:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -52,6 +57,16 @@ jobs:
     with:
       java-version: ${{ needs.prepare.outputs.java-version }}
       module: ${{ inputs.module }}
+      shared-coverage: ${{ inputs.shared-coverage }}
+
+  coverage-existing-version:
+    if: inputs.shared-coverage && needs.prepare.outputs.tag-exists == 'true'
+    needs: prepare
+    uses: ./.github/workflows/reusable-java-test.yaml
+    with:
+      java-version: ${{ needs.prepare.outputs.java-version }}
+      module: ${{ inputs.module }}
+      shared-coverage: true
 
   docker:
     # A tagged version may verify its existing image to recover a missing release.
@@ -93,8 +108,9 @@ jobs:
   coverage-badge:
     if: >-
       ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
-          needs.build.result == 'success' && needs.build.outputs.coverage-available == 'true' }}
-    needs: build
+          ((needs.build.result == 'success' && needs.build.outputs.coverage-available == 'true') ||
+           (needs.coverage-existing-version.result == 'success' && needs.coverage-existing-version.outputs.coverage-available == 'true')) }}
+    needs: [build, coverage-existing-version]
     permissions:
       contents: write
     uses: ./.github/workflows/reusable-java-coverage.yaml

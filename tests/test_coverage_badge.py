@@ -95,12 +95,20 @@ class CoverageDiscoveryTest(unittest.TestCase):
         module.main()
         self.assertFalse(Path("outputs").exists())
 
+    def test_shared_coverage_requires_aggregate(self):
+        self.report("build/reports/jacoco/test/jacocoTestReport.xml")
+        with patch.dict(os.environ, {"SHARED_COVERAGE": "true"}):
+            with self.assertRaisesRegex(ValueError, "Expected shared JaCoCo report"):
+                module.main()
+        self.assertFalse(Path("outputs").exists())
+
     def test_single_standard_report(self):
         self.report("build/reports/jacoco/test/jacocoTestReport.xml")
         module.main()
         self.assertEqual(Path("outputs").read_text(), "available=true\n")
         data = json.loads(Path("build/reports/coverage-badge/summary.json").read_text())
         self.assertEqual(data["source_sha"], "source-sha")
+        self.assertIn("Branches: n/a", Path("summary").read_text())
 
     def test_aggregate_wins_without_double_counting(self):
         self.report("build/reports/jacoco/root/jacoco.xml")

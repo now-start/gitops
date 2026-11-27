@@ -184,8 +184,7 @@ Git tag:       config-2.1.14
 Docker image:  ghcr.io/now-start/config:2.1.14
 ```
 
-이미 Git 태그와 Release가 존재하는 모듈은 검사와 Docker 단계를 건너뛰므로, 한 모듈의
-버전만 올라간 main push에서는 해당 모듈만 검사하고 이미지를 발행합니다.
+이미 Git 태그와 Release가 존재하는 모듈은 이미지 발행을 건너뜁니다. 공통 JaCoCo 대상은 같은 버전의 main push에서도 커버리지를 갱신합니다.
 이미지 발행 후 tag 생성 전에 실패한 경우에는 OCI revision이 같은 기존 이미지를
 재사용합니다. tag 생성 뒤 release만 누락된 경우에는 재실행에서 기존 이미지를 검증한 뒤 Release만 복구합니다.
 
@@ -197,6 +196,17 @@ Docker image:  ghcr.io/now-start/config:2.1.14
 | `module` | 빈 값 | Gradle 모듈 및 이미지 이름 |
 | `java-version` | 빈 값 | 명시적 JDK 버전, 생략 시 Gradle 파일에서 감지 |
 | `registry-password` | 필수 | 이미지 push에 사용할 token |
+| `shared-coverage` | 저장소별 | 공통 JaCoCo 측정 사용 여부 |
+
+### JaCoCo 커버리지
+
+`barosteel`, `lotto-service`, `nyang-nyang-bot`, `platform`에서 자동으로 사용합니다.
+CI가 같은 GitOps 리비전의 `gradle/coverage.init.gradle`을 읽어 기본 JVM 테스트를 한 번 실행하고 HTML·XML 보고서를 만듭니다.
+루트 빌드는 JVM 모듈을 합산하고, `module`을 지정한 빌드는 해당 모듈을 측정합니다.
+PR에서는 Actions 요약과 산출물을 확인할 수 있습니다. 최신 main의 성공한 측정값은 서비스 저장소의 `coverage` 브랜치에 라인·분기 배지로 게시됩니다.
+
+GitOps를 서비스와 나란히 체크아웃하면 로컬에서도 `./gradlew -I ../gitops/gradle/coverage.init.gradle check`로 같은 보고서를 생성할 수 있습니다.
+특정 모듈은 `./gradlew -I ../gitops/gradle/coverage.init.gradle -Dnowstart.coverage.module=gateway :gateway:check`처럼 실행합니다.
 
 ## 실행 과정
 
@@ -207,7 +217,8 @@ pull_request / non-main push / workflow_dispatch
 main push
   -> reusable-java-prepare.yaml
        Gradle/Java metadata 추출 -> 공통 버전·Git 태그·Release 확인
-  -> 태그와 Release가 있으면 종료
+  -> 기존 태그이고 공통 JaCoCo 대상이면 커버리지 측정 및 배지 갱신
+  -> 태그와 Release가 있으면 이미지 발행 종료
     -> 태그만 있으면 기존 이미지 검증 후 Release 복구
   -> 새 버전이면 reusable-java-test.yaml
                -> reusable-java-docker.yaml
@@ -252,7 +263,7 @@ tests/run_tests.sh
 
 ## 재실행과 Java 버전 지정
 
-- 정상 발행 완료(태그와 Release 존재): 기존처럼 검사·이미지 발행·Release 생성을 생략합니다.
+- 태그와 Release가 모두 있으면 이미지와 Release를 재발행하지 않습니다. 공통 JaCoCo 대상은 커버리지를 갱신합니다.
 - 이미지 발행 후 태그 생성 전 실패: 동일 source SHA의 이미지를 검증하여 재사용합니다.
 - 태그 생성 후 Release 생성 실패: main 실행을 다시 실행하면 빌드는 생략하고 태그가 가리키는 이미지의 revision을 검증한 뒤 Release만 생성합니다. Java와 Python 모두 amd64/arm64 이미지도 각각 검증합니다.
 - 복구 중 이미지 누락 또는 revision 불일치: 실패 처리하며 기존 버전 이미지를 새로 만들거나 덮어쓰지 않습니다.
@@ -269,7 +280,7 @@ tests/run_tests.sh
 | workflow_dispatch 실행 | 검사만 실행 | 발행 복구는 해당 main push 실행을 재실행 |
 | main에 새 stable 버전 push | 검사 → 이미지 발행 → 정식 Release | 성공 결과 확인 |
 | main에 alpha/beta/rc 버전 push | 검사 → 해당 버전 이미지 → prerelease | 버전 표기 규칙 준수 |
-| 동일 버전의 태그·Release가 이미 존재 | 후속 검사·발행 생략 | 새 코드를 발행하려면 버전 증가 |
+| 동일 버전의 태그·Release가 이미 존재 | 이미지·Release 재발행 생략 | 새 코드를 발행하려면 버전 증가 |
 | 이미지 push 후 태그 생성 전 실패 | 같은 커밋이면 기존 이미지 재사용 후 발행 재시도 | 같은 main push 실행 재실행 |
 | 태그 생성 후 Release 생성 실패 | 빌드 생략 → 기존 이미지 검증 → Release만 복구 | 같은 main push 실행 재실행 |
 | 복구 대상 이미지 누락 또는 다른 revision | 실패, 기존 버전 재빌드·덮어쓰기 안 함 | 원인 확인 후 복구 또는 새 버전 발행 |
