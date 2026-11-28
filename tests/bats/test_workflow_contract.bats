@@ -52,12 +52,23 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
+@test "Java coverage defaults on and forwards the caller setting" {
+  run ruby -ryaml -e '
+    app, test = ARGV.map { |path| YAML.load_file(path) }
+    [app, test].each do |workflow|
+      input = workflow.fetch("on", workflow[true]).fetch("workflow_call").fetch("inputs").fetch("shared-coverage")
+      abort unless input.fetch("type") == "boolean" && input.fetch("default") == true
+    end
+    %w[test-only build].each do |job|
+      abort unless app.fetch("jobs").fetch(job).fetch("with").fetch("shared-coverage") == "${{ inputs.shared-coverage }}"
+    end
+  ' "$WORKFLOWS_DIR/reusable-java-app.yaml" "$WORKFLOWS_DIR/reusable-java-test.yaml"
+  [ "$status" -eq 0 ]
+}
+
 @test "tagged Java versions run a separate coverage build only for enabled callers" {
   run ruby -ryaml -e '
-    workflow = YAML.load_file(ARGV[0])
-    coverage_input = workflow.fetch("on", workflow[true]).fetch("workflow_call").fetch("inputs").fetch("shared-coverage")
-    abort unless coverage_input.fetch("type") == "boolean" && coverage_input.fetch("default") == false
-    jobs = workflow.fetch("jobs")
+    jobs = YAML.load_file(ARGV[0]).fetch("jobs")
     coverage = jobs.fetch("coverage-existing-version")
     tagged = jobs.fetch("build").fetch("if").sub("false", "true")
     abort unless coverage.fetch("if") == "inputs.shared-coverage && #{tagged}"

@@ -761,7 +761,7 @@ CI 이미지 발행 → Renovate DEV PR → 병합 → Portainer DEV 배포·검
 
 ### Java 커버리지
 
-서비스의 CI에서 `reusable-java-app.yaml` 호출에 `with.shared-coverage: true`를 지정하면 기본 JVM 테스트의 커버리지를 측정한다. PR에서 라인·분기 커버리지와 HTML·XML 산출물을 확인할 수 있다. 최신 `main`의 성공한 측정은 버전 태그가 이미 있어도 서비스 저장소의 `coverage` 브랜치에 게시한다.
+공통 Java CI는 기본 JVM 테스트의 커버리지를 자동으로 측정한다. 공통 측정을 끄려는 작업은 `shared-coverage: false`를 전달한다. PR에서 라인·분기 커버리지와 HTML·XML 산출물을 확인할 수 있다. 최신 `main`의 성공한 측정은 버전 태그가 이미 있어도 서비스 저장소의 `coverage` 브랜치에 게시한다.
 
 `jacoco-coverage-<모듈 또는 root>`와 `jacoco-badge-<모듈 또는 root>` 산출물은 30일 보관한다. 배지 파일은 `jacoco.svg`, `jacoco-branches.svg`이며 `platform`은 각 모듈 디렉터리에 저장한다. [로컬 측정 방법과 공통 설정](docs/shared-workflows.md#jacoco-커버리지)
 

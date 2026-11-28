@@ -173,7 +173,6 @@ jobs:
     uses: now-start/gitops/.github/workflows/reusable-java-app.yaml@main
     with:
       module: gateway
-      shared-coverage: true
     secrets:
       registry-password: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -197,13 +196,14 @@ Docker image:  ghcr.io/now-start/config:2.1.14
 | `module` | 빈 값 | Gradle 모듈 및 이미지 이름 |
 | `java-version` | 빈 값 | 명시적 JDK 버전, 생략 시 Gradle 파일에서 감지 |
 | `registry-password` | 필수 | 이미지 push에 사용할 token |
-| `shared-coverage` | `false` | 공통 JaCoCo 측정 사용 여부 |
+| `shared-coverage` | `true` | 공통 JaCoCo 측정 사용 여부 |
 
 ### JaCoCo 커버리지
 
-커버리지를 측정할 작업에서 `reusable-java-app.yaml`을 호출할 때 `with.shared-coverage`를 `true`로 지정합니다.
+`reusable-java-app.yaml`을 호출하면 기본으로 커버리지를 측정합니다. 특정 작업에서 공통 측정을 끄려면 호출의 `with`에 `shared-coverage: false`를 지정합니다.
 CI가 같은 GitOps 리비전의 `gradle/coverage.init.gradle`을 읽어 기본 JVM 테스트를 한 번 실행하고 HTML·XML 보고서를 만듭니다.
 루트 빌드는 JVM 모듈을 합산하고, `module`을 지정한 빌드는 해당 모듈을 측정합니다.
+측정 범위에 기본 JVM 테스트 소스가 없으면 빌드는 계속하고 배지 게시는 생략합니다.
 PR에서는 Actions 요약과 산출물을 확인할 수 있습니다. 최신 main의 성공한 측정값은 서비스 저장소의 `coverage` 브랜치에 라인·분기 배지로 게시됩니다.
 
 GitOps를 서비스와 나란히 체크아웃하면 로컬에서도 `./gradlew -I ../gitops/gradle/coverage.init.gradle check`로 같은 보고서를 생성할 수 있습니다.

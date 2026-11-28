@@ -20,7 +20,7 @@ on:
       shared-coverage:
         description: Apply the GitOps JaCoCo convention to the requested Gradle project
         type: boolean
-        default: false
+        default: true
 
     outputs:
       coverage-available:
@@ -109,6 +109,7 @@ jobs:
         run: |
           coverage_args=()
           if [[ "$SHARED_COVERAGE" == 'true' ]]; then
+            rm -f -- "${MODULE:+$MODULE/}build/jacoco/no-test-data"
             coverage_args=(--init-script "$GITHUB_WORKSPACE/.ci-gitops/gradle/coverage.init.gradle" "-Dnowstart.coverage.module=$MODULE")
           fi
           GRADLE_TASK="${MODULE:+:$MODULE:}build"
@@ -176,6 +177,10 @@ jobs:
               reports = sorted((base / "build/reports/jacoco").glob("**/*.xml"))
               aggregate = base / "build/reports/jacoco/root/jacoco.xml"
               if os.environ.get("SHARED_COVERAGE") == "true" and aggregate not in reports:
+                  if (base / "build/jacoco/no-test-data").is_file():
+                      with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
+                          stream.write("### JaCoCo\n기본 테스트 소스가 없습니다 (NO-SOURCE). 배지 게시를 건너뜁니다.\n")
+                      return
                   raise ValueError(f"Expected shared JaCoCo report at {aggregate}")
               if aggregate in reports:
                   report = aggregate

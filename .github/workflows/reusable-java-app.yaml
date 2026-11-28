@@ -21,7 +21,7 @@ on:
       shared-coverage:
         description: Collect JaCoCo for this repository, including main pushes of an existing version
         type: boolean
-        default: false
+        default: true
     secrets:
       registry-password:
         description: "Registry password/token"
