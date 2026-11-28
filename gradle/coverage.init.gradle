@@ -42,12 +42,21 @@ gradle.projectsEvaluated {
     def reportDir = scope.layout.buildDirectory.dir('reports/jacoco/root')
     def xmlFile = reportDir.map { it.file('jacoco.xml') }
     def htmlDir = reportDir.map { it.dir('html') }
+    def noTestData = scope.layout.buildDirectory.file('jacoco/no-test-data')
     def verifyData = scope.tasks.register('nowstartVerifyCoverageData') {
         dependsOn(tests)
         doLast {
             def data = measuredData.get()
             // JacocoReport skips when no tests ran; do not publish last run's outputs.
-            if (data.empty) scope.delete(xmlFile, htmlDir)
+            scope.delete(noTestData)
+            if (data.empty) {
+                scope.delete(xmlFile, htmlDir)
+                if (tests.every { it.get().state.noSource }) {
+                    def marker = noTestData.get().asFile
+                    marker.parentFile.mkdirs()
+                    marker.text = 'NO-SOURCE\n'
+                }
+            }
             data.each { file ->
                 if (!file.isFile() || file.length() == 0) {
                     throw new GradleException("Missing JaCoCo execution data for a completed test: ${file}")

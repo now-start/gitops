@@ -102,6 +102,16 @@ class CoverageDiscoveryTest(unittest.TestCase):
                 module.main()
         self.assertFalse(Path("outputs").exists())
 
+    def test_shared_coverage_skips_badge_for_module_with_no_test_sources(self):
+        marker = Path("app/build/jacoco/no-test-data")
+        marker.parent.mkdir(parents=True)
+        marker.write_text("NO-SOURCE\n")
+        with patch.dict(os.environ, {"SHARED_COVERAGE": "true", "MODULE": "app"}):
+            module.main()
+        self.assertIn("NO-SOURCE", Path("summary").read_text(encoding="utf-8"))
+        self.assertFalse(Path("outputs").exists())
+        self.assertFalse(Path("build/reports/coverage-badge").exists())
+
     def test_single_standard_report(self):
         self.report("build/reports/jacoco/test/jacocoTestReport.xml")
         module.main()
