@@ -90,7 +90,7 @@ x-shm-mount: &shm-mount
 services:
   etcd-a:
     <<: *service-defaults
-    image: quay.io/coreos/etcd:v3.6.16
+    image: quay.io/coreos/etcd:v3.7.4
     hostname: etcd-a
     environment:
       <<: *etcd-environment
@@ -107,7 +107,7 @@ services:
 
   etcd-b:
     <<: *service-defaults
-    image: quay.io/coreos/etcd:v3.6.16
+    image: quay.io/coreos/etcd:v3.7.4
     hostname: etcd-b
     environment:
       <<: *etcd-environment
@@ -124,7 +124,7 @@ services:
 
   etcd-c:
     <<: *service-defaults
-    image: quay.io/coreos/etcd:v3.6.16
+    image: quay.io/coreos/etcd:v3.7.4
     hostname: etcd-c
     environment:
       <<: *etcd-environment
